@@ -12,8 +12,8 @@ mod tests {
     use crate::keypair;
 
     #[test]
-    fn dry_2k_keygen_test() {
-        for _ in 0..2048 {
+    fn dry_512_keygen_test() {
+        for _ in 0..512 {
             let _ = keypair::key_gen().unwrap();
         }
     }

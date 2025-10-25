@@ -8,3 +8,9 @@ env_logger = "0.11.8"
 getrandom = "0.3.4"
 sha3 = "0.11.0-rc.3"
 hex = "0.4.3"
+
+[features]
+default = ["ML_DSA_44"]
+ML_DSA_44 = []
+ML_DSA_65 = []
+ML_DSA_87 = []
