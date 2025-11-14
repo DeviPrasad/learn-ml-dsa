@@ -37,4 +37,4 @@ pub const BITLEN_2_ETA: usize = 3; // bitlen(2*2) = bitlen(b100) = 3
 pub const LEN_PUBLIC_KEY: usize = 32 + 32 * K * (BITLEN_Q_MINUS_1 - D);
 pub const LEN_PRIVATE_KEY: usize = 32 + 32 + 64 + 32 * ((K+L) * BITLEN_2_ETA + (D * K));
 pub const LEN_ETA_PACK_POLY: usize = 32 * BITLEN_2_ETA;
-pub const LEN_T0_PACK_POLY: usize = 32 * BITLEN_2_POW_D_MINUS_1;
+pub const LEN_T0_PACK_POLY: usize = 32 * BITLEN_2_POW_D_MINUS_1; // which BTW, is same as 32 * D

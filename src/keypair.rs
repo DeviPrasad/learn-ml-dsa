@@ -64,6 +64,7 @@ fn key_gen_internal (xi: &[u8; 32]) -> ([u8; LEN_PUBLIC_KEY], [u8; LEN_PRIVATE_K
 
     let pk = pk_encode(&rho, &t1);
 
+    // public random
     let mut tr = [0u8; 64];
     Shake256::digest_xof(&pk, &mut  tr);
     let sk = sk_encode(&rho, &key, &tr, &s1, &s2, &t0);
@@ -293,16 +294,20 @@ fn reg_bounded_poly(rho: [u8; 66]) -> [i32; 256] {
 }
 
 fn coefficient_from_half_byte(b: u8) -> Result<i8, MlDsaError> {
-    assert!(ETA == 2 || ETA == 4);
+    #[cfg(any(feature = "ML_DSA_44", feature = "ML_DSA_87"))]
     const MOD5: [i8; 16] = [0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0];
-    if ETA == 2 && b < 15 {
+    #[cfg(any(feature = "ML_DSA_44", feature = "ML_DSA_87"))]
+    if b < 15 {
         Ok(2 - MOD5[(b & 0x0F) as usize])
     } else {
-        if ETA == 4 && b < 9 {
-            Ok(4 - b as i8)
-        } else {
-            Err(MlDsaError::BoundedPolySampleError)
-        }
+        Err(MlDsaError::BoundedPolySampleError)
+    }
+
+    #[cfg(feature = "ML_DSA_65")]
+    if b < 9 {
+        Ok(4 - b as i8)
+    } else {
+        Err(MlDsaError::BoundedPolySampleError)
     }
 }
 

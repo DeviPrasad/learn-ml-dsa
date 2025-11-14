@@ -1,5 +1,5 @@
 [package]
-name = "ml-dsa-44"
+name = "ml-dsa-easy"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,7 +10,7 @@ sha3 = "0.11.0-rc.3"
 hex = "0.4.3"
 
 [features]
-default = ["ML_DSA_44"]
+default = ["ML_DSA_65"]
 ML_DSA_44 = []
 ML_DSA_65 = []
 ML_DSA_87 = []
