@@ -2,3 +2,7 @@ target
 .idea
 .DS_Store
 .venv
+out
+temp
+scrap
+

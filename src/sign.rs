@@ -1,7 +1,7 @@
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use crate::err::MlDsaError;
-use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, poly_add, poly_sub};
-use crate::params::{N, D, ETA, K, L, LEN_ETA_PACK_POLY, LEN_PRIVATE_KEY, LEN_T0_PACK_POLY, SIG_LEN, LAMBDA, TAU, Q, GAMMA2, BITLEN_PACK_W1, GAMMA1, BETA, OMEGA};
+use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ntt_neg_vec, ntt_sub, poly_add, poly_sub};
+use crate::params::{N, D, ETA, K, L, LEN_ETA_PACK_POLY, LEN_PRIVATE_KEY, LEN_T0_PACK_POLY, SIG_LEN, LAMBDA, TAU, Q, GAMMA2, BITLEN_PACK_W1, GAMMA1, BETA, LEN_Z_SCALAR, OMEGA, LEN_HINT_BIT_PACK};
 use crate::xpand::{expand_a, expand_mask};
 
 pub fn sign(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], ctx: &[u8]) -> Result<[u8; SIG_LEN], MlDsaError> {
@@ -15,24 +15,29 @@ pub fn sign(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], ctx: &[u8]) -> Result<[u8; SIG
     sign_internal(sk, &ctx, &m, &rnd)
 }
 
-pub fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8]) -> Result<[u8; SIG_LEN], MlDsaError> {
+pub fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8; 32]) -> Result<[u8; SIG_LEN], MlDsaError> {
+    let (c_tilda, z, hint) = response_and_hint(sk, ctx, m, rnd)?;
+    Ok(sig_encode(&c_tilda, &z, &hint))
+}
+
+pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8; 32]) -> Result<([u8; LAMBDA/4], [[i32; N]; L], [[i32; N]; K]), MlDsaError> {
     // line 1
     let (rho, key, tr, s1, s2, t0) = sk_decode(sk)?;
 
     // line 2
-    let mut s1_hat = [[0i32; 256]; L];
+    let mut s1_hat = [[0i32; N]; L];
     for (i, w) in s1.iter().enumerate() {
         s1_hat[i] = ntt(&w);
     }
 
     // line 3
-    let mut s2_hat = [[0i32; 256]; K];
+    let mut s2_hat = [[0i32; N]; K];
     for (i, w) in s2.iter().enumerate() {
         s2_hat[i] = ntt(&w);
     }
 
     // line 4
-    let mut t0_hat = [[0i32; 256]; K];
+    let mut t0_hat = [[0i32; N]; K];
     for (i, w) in t0.iter().enumerate() {
         t0_hat[i] = ntt(&w);
     }
@@ -42,59 +47,66 @@ pub fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8
 
     // line 6
     let mut mu = [0u8; 64];
-    let mut h = sha3::Shake256::default();
-    h.update(&tr);
-    h.update(&[0, ctx.len() as u8]);
-    h.update(ctx);
-    h.update(m);
-    h.finalize_xof_into(&mut mu);
-
+    {
+        let mut h = sha3::Shake256::default();
+        h.update(&tr);
+        h.update(&[0, ctx.len() as u8]);
+        h.update(ctx);
+        h.update(m);
+        h.finalize_xof_into(&mut mu);
+    }
     // line 7
     let mut rho_dash = [0u8; 64];
-    let mut h = sha3::Shake256::default();
-    h.update(&key);
-    h.update(&rnd);
-    h.update(&mu);
-    h.finalize_xof_into(&mut rho_dash);
-
+    {
+        let mut h = sha3::Shake256::default();
+        h.update(&key);
+        h.update(rnd);
+        h.update(&mu);
+        h.finalize_xof_into(&mut rho_dash);
+    }
     // line 8
     let mut counter = 0usize;
+
+    let mut z = [[0i32; N]; L];
+    let mut c_tilda = [0u8; LAMBDA/4];
+    let mut hint: [[i32; N]; K];
+
     // line 9
-    let mut response_hint: Option<([[i32; 256]; L], [[i32; 256]; K])> = None;
+    let mut response_hint: Option<([u8; LAMBDA/4], [[i32; N]; L], [[i32; N]; K])> = None;
     // line 10
     while response_hint.is_none() {
-        if counter/L > 500 {
-            println!("MLDSA signature restart case 0. {counter}\n");
-            break;
+        if counter >= 2400 { //(1 << 16) {
+            return Err(MlDsaError::SignatureAborted);
         }
         // line 11
-        let y: [[i32; 256]; L] = expand_mask(&rho_dash, counter as u16);
+        let y: [[i32; N]; L] = expand_mask(&rho_dash, counter as u16);
         // line 12
-        let mut y_hat = [[0i32; 256]; L];
+        let mut y_hat = [[0i32; N]; L];
         for (i, r) in y.iter().enumerate() {
             y_hat[i] = ntt(r);
         }
-        let mut prod_a_y =  [[0i32; 256]; K];
-        for (i, a_row_poly) in a_hat.iter().enumerate() {
-            for (k, y_col_poly) in y_hat.iter().enumerate() {
-                prod_a_y[i] = ntt_multiply(&a_row_poly[k], &y_col_poly);
+
+        let mut prod_a_y =  [[0i32; N]; K];
+        for k in 0..K {
+            for l in 0..L {
+                prod_a_y[k] = ntt_multiply(&a_hat[k][l], &y_hat[l]);
             }
         }
-        let w: [[i32; 256]; K] = prod_a_y.map(|v| ntt_inverse(&v));
+        let w: [[i32; N]; K] = prod_a_y.map(|v| ntt_inverse(&v));
 
         // lines 13 and 14
         // stores high-bits of the polynomial w.
         // coefficients of w1 are in [0, (Q-1)/(2*GAMMA2) - 1]
-        let mut w1: [[i32; 256]; K] = [[0; 256]; K];
+        let mut w1: [[i32; N]; K] = [[0; N]; K];
         // section 7.4 specifies that functions are applied coefficientwise
         // to the polynomials in the vector,
-        for (k, w) in w.iter().enumerate() {
-            for (j, &r) in w.iter().enumerate() {
-                w1[k][j] = high_bits(r); // signer's commitment
+        for k in 0..K {
+            for j in 0..N {
+                w1[k][j] = high_bits(w[k][j]);
             }
         }
         // line 15
-        let mut c_tilda = [0u8; LAMBDA/4];
+        // let mut c_tilda = [0u8; LAMBDA/4];
         let mut h = sha3::Shake256::default();
         h.update(&mu);
         h.update(&w1_encode(&w1));
@@ -107,28 +119,26 @@ pub fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8
         let c_hat = ntt(&c);
 
         // line 18: cs1 = ntt_inverse(c_hat * s1_hat)
-        let mut cs1 = [[0i32; 256]; L];
-        for (l, s1) in s1_hat.iter().enumerate() {
-            cs1[l] = ntt_inverse(&ntt_multiply(&c_hat, s1));
+        let mut cs1 = [[0i32; N]; L];
+        for l in 0..L {
+            cs1[l] = ntt_inverse(&ntt_multiply(&c_hat, &s1_hat[l]));
         }
 
         // line 19: cs2 = ntt_inverse(c_hat * s2_hat)
-        let mut cs2 =[[0i32; 256]; K];
-        for (k, s2) in s2_hat.iter().enumerate() {
-            cs2[k] = ntt_inverse(&ntt_multiply(&c_hat, s2));
+        let mut cs2 =[[0i32; N]; K];
+        for k in 0..K {
+            cs2[k] = ntt_inverse(&ntt_multiply(&c_hat, &s2_hat[k]));
         }
         // line 20: z = y + cs1
-        let mut z = [[0i32; 256]; L];
+        // let mut z = [[0i32; N]; L];
         for l in 0..L {
-            z[l] = poly_add(&y[l], &cs1[l]);
+            z[l] = ntt_add(&y[l], &cs1[l]);
         }
         // lines 21 and 22.
-        let mut r0 = [[0i32; 256]; K];
+        let mut r0 = [[0i32; N]; K];
         for k in 0..K {
-            r0[k] = poly_sub(&w[k], &cs2[k]);
-        }
-        for k in 0..K {
-            for j in 0..256 {
+            r0[k] = ntt_sub(&w[k], &cs2[k]);
+            for j in 0..N {
                 r0[k][j] = low_bits(r0[k][j]);
             }
         }
@@ -139,127 +149,125 @@ pub fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], ctx: &[u8], m: &[u8], rnd: &[u8
         // void scalar_max(uint32_t *max, const scalar *s)
         // uint32_t vector_max(const vector<X> *a)
         // uint32_t z_max = vector_max(&values->sign.z);
-        const HALF_Q: i32 = Q/2;
         // z mods q
-        let infinity_norm_z = {
-            let mut max: u32 = 0;
-            for k in 0..L {
-                for &c in z[k].iter() {
-                    // assert!(c < Q);
-                    // return x <= Q/2 ? x : kPrime - x;
-                    let abs_mod_prime = if c <= HALF_Q {
-                        c as u32
-                    } else {
-                        (Q - c) as u32
-                    };
-                    if abs_mod_prime > max {
-                        max = abs_mod_prime;
-                    }
-                }
-            }
-            max
-        };
+        let infinity_norm_z = infinity_norm(&z);
 
         // https://boringssl.googlesource.com/boringssl/+/main/crypto/fipsmodule/mldsa/mldsa.cc.inc
         // abs_signed (https://boringssl.googlesource.com/boringssl/+/main/crypto/fipsmodule/mldsa/mldsa.cc.inc#301)
         // scalar_max_signed
         // uint32_t r0_max = vector_max_signed(r0);
         // Returns the absolute value, interpreting the high bit as a sign bit.
-        let infinity_norm_r0 = {
-            let mut max: u32 = 0;
-            for k in 0..K {
-                for &c in r0[k].iter() {
-                    // return is_negative(x) ? -x : x;
-                    let abs_c = if c < 0 {
-                        -c as u32
-                    } else {
-                        c as u32
-                    };
-                    if abs_c > max {
-                        max = abs_c;
-                    }
-                }
-            }
-            max
-        };
+        let infinity_norm_r0 = infinity_norm(&r0);
         // line 23.
-        let t1 = infinity_norm_z >= ((GAMMA1 - BETA) as u32);
-        let t2 = infinity_norm_r0 >= ((GAMMA2 - BETA) as u32);
+        let t1 = infinity_norm_z >= (GAMMA1 - BETA);
+        let t2 = infinity_norm_r0 >= (GAMMA2 - BETA);
+        if (!t1 && !t2) {
+            assert!(t1 == false && t2 == false);
+        }
         if t1 || t2 {
-            println!("MLDSA signature restart case 1: {t1} {t2}\n");
+            #[cfg(feature = "DEBUG_PRINT_RESTARTS")]
+            println!("MLDSA signature restart case 1: {t1} {t2}.");
+            response_hint = None;
         } else { // lines 24 to 30
             // line 25.
-            let mut c_t0 =[[0i32; 256]; K];
+            let mut c_t0 =[[0i32; N]; K];
             for k in 0..K {
                 c_t0[k] = ntt_inverse(&ntt_multiply(&c_hat, &t0_hat[k]));
             }
             // lines 26 and 27.
-            let hint = make_hint(&c_t0, &vec_sub(&w, &vec_add(&cs2, &c_t0)));
-            let infinity_morm_ct0 = {
-                let mut max: i32 = 0;
-                for k in 0..K {
-                    for &c in c_t0[k].iter() {
-                        assert!(c < Q);
-                        // return x <= Q/2 ? x : kPrime - x;
-                        let abs_mod_prime = if c <= HALF_Q {
-                            c
-                        } else {
-                            Q - c
-                        };
-                        if abs_mod_prime > max {
-                            max = abs_mod_prime;
-                        }
-                    }
-                }
-                max
-            };
-            if infinity_morm_ct0 >= GAMMA2 as i32 || count_ones(&hint) > OMEGA as i32 {
-                println!("MLDSA signature restart case 2.\n");
+            hint = make_hint(&ntt_neg_vec(&c_t0), &vec_add(&vec_sub(&w, &cs2), &c_t0));
+            let infinity_norm_ct0 = infinity_norm(&c_t0);
+            // lines 28-30
+            let t1 = infinity_norm_ct0 >= GAMMA2;
+            let t2 = count_ones(&hint) > OMEGA as u32;
+            if  t1 || t2 {
+                // #[cfg(feature = "DEBUG_PRINT_RESTARTS")]
+                println!("MLDSA signature restart case 2.");
+                response_hint = None;
             } else {
-                response_hint = Some((z, hint));
+                response_hint = Some((c_tilda, z, hint));
+                // break;
             }
         }
         // line 31
         counter += L;
-    }
+    }  // line 32
 
-    let sig = [0u8; SIG_LEN];
-    Ok(sig)
+    println!("Signature found after {counter} restarts!");
+    response_hint.ok_or(MlDsaError::SignatureAborted)
 }
 
-fn make_hint(z: &[[i32; 256]; K], r: &[[i32; 256]; K]) -> [[i32; 256]; K] {
-    let mut hint = [[0i32; 256]; K];
+
+fn sig_encode(c_tilda: &[u8; LAMBDA/4], z: &[[i32; N]; L], hint: &[[i32; N]; K]) -> [u8; SIG_LEN]{
+    let mut sig = [0u8; SIG_LEN];
+
+    sig[..LAMBDA/4].copy_from_slice(c_tilda);
+    let mut off = LAMBDA/4;
+    for i in 0..L {
+        sig[off..][..LEN_Z_SCALAR].copy_from_slice(&bit_pack_z(&z[i]));
+        off += LEN_Z_SCALAR;
+    }
+    sig[off..].copy_from_slice(&bit_pack_hint(hint));
+    sig
+}
+
+fn infinity_norm<const D: usize>(vec: &[[i32; N]; D]) -> u32 {
+    const HALF_Q: u32 = (Q / 2) as u32;
+    let mut norm: u32 = 0;
+    for k in 0..D {
+        for &c in vec[k].iter() {
+            assert!(c < Q);
+            // return x <= Q/2 ? x : kPrime - x;
+            let abs_mod_prime = if c as u32 <= HALF_Q {
+                c as u32
+            } else {
+                (Q - c) as u32
+            };
+            if abs_mod_prime > norm {
+                norm = abs_mod_prime;
+            }
+        }
+    }
+    norm
+}
+
+fn make_hint(z: &[[i32; N]; K], r: &[[i32; N]; K]) -> [[i32; N]; K] {
+    let mut hint = [[0i32; N]; K];
     for k in 0..K {
         for i in 0..N {
-            hint[k][i] = (high_bits(r[k][i]) != high_bits(r[k][i] + z[k][i])) as i32;
+            hint[k][i] = if (high_bits(r[k][i]) != high_bits(r[k][i] + z[k][i])) {
+                1
+            } else {
+                0
+            }
         }
     }
     hint
 }
 
-fn count_ones(h: &[[i32; 256]; K]) -> i32 {
-    let mut ones = 0;
+fn count_ones(h: &[[i32; N]; K]) -> u32 {
+    let mut ones = 0u32;
     for k in 0..K {
         for i in 0..N {
             assert!(h[k][i] == 0 || h[k][i] == 1);
-            ones += h[k][i];
+            ones += h[k][i] as u32;
         }
     }
     ones
 }
 
-pub fn vec_add(x: &[[i32; 256]; K], y: &[[i32; 256]; K]) -> [[i32; 256]; K] {
-    let mut r = [[0i32; 256]; K];
+pub fn vec_add(x: &[[i32; N]; K], y: &[[i32; N]; K]) -> [[i32; N]; K] {
+    let mut r = [[0i32; N]; K];
     for k in 0..K {
-        r[0] = poly_add(&x[k], &y[k]);
+        r[0] = ntt_add(&x[k], &y[k]);
     }
     r
 }
 
-pub fn vec_sub(x: &[[i32; 256]; K], y: &[[i32; 256]; K]) -> [[i32; 256]; K] {
-    let mut r = [[0i32; 256]; K];
+pub fn vec_sub(x: &[[i32; N]; K], y: &[[i32; N]; K]) -> [[i32; N]; K] {
+    let mut r = [[0i32; N]; K];
     for k in 0..K {
-        r[0] = poly_sub(&x[k], &y[k]);
+        r[0] = ntt_sub(&x[k], &y[k]);
     }
     r
 }
@@ -267,7 +275,7 @@ pub fn vec_sub(x: &[[i32; 256]; K], y: &[[i32; 256]; K]) -> [[i32; 256]; K] {
 // algorithm 28, page 35.
 // encodes a polynomial vector w1 into a byte string.
 // input: w1 \in R^K whose polynomial coefficients are in [0, (Q-1)/(2*GAMMA2) - 1]
-fn w1_encode(w1: &[[i32; 256]; K]) -> [u8; 32*K*BITLEN_PACK_W1]{
+fn w1_encode(w1: &[[i32; N]; K]) -> [u8; 32*K*BITLEN_PACK_W1]{
     // K polynomials. A polynomial has (32*8) coefficients, each BITLEN_PACK_W1 wide.
     let r = [0u8; 32*K*BITLEN_PACK_W1];
     for i in 0..K {
@@ -282,7 +290,7 @@ fn w1_encode(w1: &[[i32; 256]; K]) -> [u8; 32*K*BITLEN_PACK_W1]{
 // input: B = 1023 and w= \in R such that coefficients are all in [0, 1023].
 // output: a byte string of length 32 * bitlen(B)
 #[inline]
-fn simple_bit_pack_w1(w1: &[i32; 256]) -> [u8; 32 * BITLEN_PACK_W1] {
+fn simple_bit_pack_w1(w1: &[i32; N]) -> [u8; 32 * BITLEN_PACK_W1] {
 
     let mut r = [0u8; 32 * BITLEN_PACK_W1];
 
@@ -299,6 +307,62 @@ fn simple_bit_pack_w1(w1: &[i32; 256]) -> [u8; 32 * BITLEN_PACK_W1] {
     #[cfg(any(feature="ML_DSA_65", feature="ML_DSA_87"))]
     for i in 0..N/2 {
         r[i] = (w1[2 * i + 0] as u8) | ((w1[2 * i + 1] as u8) << 4);
+    }
+
+    r
+}
+
+fn bit_pack_hint(hint: &[[i32; N]; K]) -> [u8; LEN_HINT_BIT_PACK] {
+    let mut y = [0u8; LEN_HINT_BIT_PACK];
+    let mut index = 0;
+    for i in 0..K {
+        for j in 0..N {
+            if hint[i][j] != 0 {
+                y[index] = j as u8;
+                index += 1;
+            }
+        }
+        y[OMEGA + i] = index as u8;
+    }
+    y
+}
+
+fn bit_pack_z(z: &[i32; N]) -> [u8; LEN_Z_SCALAR] {
+    let mut r = [0u8; LEN_Z_SCALAR];
+    let mut t = [0i32; 4];
+
+    #[cfg(feature="ML_DSA_44")]
+    for i in 0..N/4 {
+        t[0] = GAMMA1 as i32 - z[4*i+0];
+        t[1] = GAMMA1 as i32 - z[4*i+1];
+        t[2] = GAMMA1 as i32 - z[4*i+2];
+        t[3] = GAMMA1 as i32 - z[4*i+3];
+
+        r[9*i+0]  = t[0] as u8;
+        r[9*i+1]  = (t[0] >> 8) as u8;
+        r[9*i+2]  = (t[0] >> 16) as u8;
+        r[9*i+2] |= (t[1] << 2) as u8;
+        r[9*i+3]  = (t[1] >> 6) as u8;
+        r[9*i+4]  = (t[1] >> 14) as u8;
+        r[9*i+4] |= (t[2] << 4) as u8;
+        r[9*i+5]  = (t[2] >> 4) as u8;
+        r[9*i+6]  = (t[2] >> 12) as u8;
+        r[9*i+6] |= (t[3] << 6) as u8;
+        r[9*i+7]  = (t[3] >> 2) as u8;
+        r[9*i+8]  = (t[3] >> 10) as u8;
+    }
+
+    #[cfg(any(feature="ML_DSA_65", feature="ML_DSA_87"))]
+    for i in 0..N/2 {
+        t[0] = GAMMA1 as i32 - z[2*i+0];
+        t[1] = GAMMA1 as i32 - z[2*i+1];
+
+        r[5*i+0]  = t[0] as u8;
+        r[5*i+1]  = (t[0] >> 8) as u8;
+        r[5*i+2]  = (t[0] >> 16) as u8;
+        r[5*i+2] |= (t[1] << 4) as u8;
+        r[5*i+3]  = (t[1] >> 4) as u8;
+        r[5*i+4]  = (t[1] >> 12) as u8;
     }
 
     r
@@ -361,16 +425,16 @@ fn decompose(r: i32) -> (i32, i32) {
 // That is, the number of non-zero coefficients in c are less than 64.
 // More precisely, it will be one of 39, 49, and 60 for category 2, 3, and 5, respectively.
 #[inline]
-pub fn sample_in_ball(rho: &[u8; LAMBDA/4]) -> [i32; 256] {
+pub fn sample_in_ball(rho: &[u8; LAMBDA/4]) -> [i32; N] {
     let mut h = sha3::Shake256::default();
     h.update(rho);
     let mut xof = h.finalize_xof();
     let mut s = [0u8; 8];
     xof.read(&mut s);
-    let mut h: u64 = u64::from_le_bytes(s); // note: h has 256 bits.
-    let mut c = [0i32; 256];
-    for i in (256-TAU)..256usize { // iterate TAU times
-        assert!(i > 195); // or 256-i < 61
+    let mut h: u64 = u64::from_le_bytes(s); // note: h has N bits.
+    let mut c = [0i32; N];
+    for i in (N-TAU)..256usize { // iterate TAU times
+        assert!(i > 195); // or N-i < 61
         let mut _j = [0u8];
         xof.read(&mut _j);
         let mut j = _j[0] as usize;
@@ -380,15 +444,15 @@ pub fn sample_in_ball(rho: &[u8; LAMBDA/4]) -> [i32; 256] {
         }
         // randomly selected coefficient c_j has a smaller (or same) degree than c_i
         c[i] = c[j]; // init c[i] with {-1, 0, 1}, from a random location; most likely contains 0.
-        // h[i + TAU - 256] actually evaluates to h[0], [1], h[2], ..., h[255]
-        // (256-TAU) + TAU - 256, (256-TAU + 1) + TAU - 256, (256-TAU + 2) + TAU - 256,..., (256-TAU + 255) + TAU - 256,
+        // h[i + TAU - N] actually evaluates to h[0], [1], h[2], ..., h[255]
+        // (N-TAU) + TAU - N, (N-TAU + 1) + TAU - N, (N-TAU + 2) + TAU - N,..., (N-TAU + 255) + TAU - N,
         c[j] = 1 - 2 * (h & 1) as i32; // c_j is -1 if (h&1) is 1, and 1 otherwise.
         h >>= 1
     }
     c
 }
 
-pub fn sk_decode(sk: &[u8; LEN_PRIVATE_KEY]) -> Result<([u8; 32], [u8; 32], [u8; 64], [[i32; 256]; L], [[i32; 256]; K], [[i32; 256]; K]), MlDsaError> {
+pub fn sk_decode(sk: &[u8; LEN_PRIVATE_KEY]) -> Result<([u8; 32], [u8; 32], [u8; 64], [[i32; N]; L], [[i32; N]; K], [[i32; N]; K]), MlDsaError> {
     assert_eq!(sk.len(), 128 + L * LEN_ETA_PACK_POLY + K * LEN_ETA_PACK_POLY + K * LEN_T0_PACK_POLY);
     let rho = sk[0..32].try_into()?;
     let key = sk[32..64].try_into()?;
@@ -397,19 +461,19 @@ pub fn sk_decode(sk: &[u8; LEN_PRIVATE_KEY]) -> Result<([u8; 32], [u8; 32], [u8;
     let z: &[u8; K * LEN_ETA_PACK_POLY] = &sk[128 + L*LEN_ETA_PACK_POLY..128 + L*LEN_ETA_PACK_POLY + K*LEN_ETA_PACK_POLY].try_into()?;
     let w: &[u8; K * LEN_T0_PACK_POLY] = &sk[128 + L*LEN_ETA_PACK_POLY + K*LEN_ETA_PACK_POLY ..].try_into()?;
 
-    let mut s1 = [[0i32; 256]; L];
+    let mut s1 = [[0i32; N]; L];
     for i in 0..L {
         let t = &y[i * LEN_ETA_PACK_POLY..(i + 1) * LEN_ETA_PACK_POLY].try_into()?;
         bit_unpack_eta(&t, &mut s1[i])?;
     }
 
-    let mut s2: [[i32; 256]; K] = [[0; 256]; K];
+    let mut s2: [[i32; N]; K] = [[0; N]; K];
     for i in 0..K {
         let t = &z[i * LEN_ETA_PACK_POLY..(i + 1) * LEN_ETA_PACK_POLY].try_into()?;
         bit_unpack_eta(&t, &mut s2[i])?;
     }
 
-    let mut t0: [[i32; 256]; K] = [[0; 256]; K];
+    let mut t0: [[i32; N]; K] = [[0; N]; K];
     for i in 0..K {
         let t = &w[i * LEN_T0_PACK_POLY..(i + 1) * LEN_T0_PACK_POLY].try_into()?;
         bit_unpack_t0(&t, &mut t0[i])?;
@@ -422,12 +486,12 @@ fn inclusive(l: i32, h: i32, v: i32) -> bool {
 }
 
 // w is bit-packed polynomial
-fn bit_unpack_eta(w: &[u8; LEN_ETA_PACK_POLY], s: &mut[i32; 256]) -> Result<(), MlDsaError> {
+fn bit_unpack_eta(w: &[u8; LEN_ETA_PACK_POLY], s: &mut[i32; N]) -> Result<(), MlDsaError> {
     const _ETA_: i32 = ETA as i32;
     let mut ok = true;
 
     #[cfg(any(feature="ML_DSA_44", feature="ML_DSA_87"))]
-    for i in 0..N as usize/8 {
+    for i in 0..N/8 {
         s[8*i+0] = ((w[3*i+0] >> 0) & 7) as i32;
         s[8*i+1] = ((w[3*i+0] >> 3) & 7) as i32;
         s[8*i+2] = (((w[3*i+0] >> 6) | (w[3*i+1] << 2)) & 7) as i32;
@@ -477,7 +541,7 @@ One iteration handles bits in this fashion - w0 is the first byte to consider in
 |                    |                             |                     |                     |
  **/
 // Unpack polynomial t0 with coefficients in ]-2^{D-1}, 2^{D-1}]
-fn bit_unpack_t0(w: &[u8; LEN_T0_PACK_POLY], t: &mut [i32; 256]) -> Result<(), MlDsaError> {
+fn bit_unpack_t0(w: &[u8; LEN_T0_PACK_POLY], t: &mut [i32; N]) -> Result<(), MlDsaError> {
     const _2_POW_D_MINUS_1_: i32 = 1 << (D-1);
     let mut ok = true;
     for i in 0..N/8 {

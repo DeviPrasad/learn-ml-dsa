@@ -1,8 +1,8 @@
 use sha3::digest::{ExtendableOutput, Update};
 use crate::params::{GAMMA1, GAMMA1_COEFFICIENT_POLY_LEN, K, L, N};
 
-pub fn expand_a(seed: &[u8; 32]) -> [[[i32; 256]; L]; K] {
-    let mut a_hat: [[[i32; 256]; L]; K] = [[[0i32; 256]; L]; K];
+pub fn expand_a(seed: &[u8; 32]) -> [[[i32; N]; L]; K] {
+    let mut a_hat: [[[i32; N]; L]; K] = [[[0i32; N]; L]; K];
     let mut rp = [0u8; 34];
     rp[0..32].copy_from_slice(seed);
     for r in 0..K {
@@ -22,8 +22,8 @@ pub fn expand_a(seed: &[u8; 32]) -> [[[i32; 256]; L]; K] {
 // input: a sedd rho \in B^64, and a non-negative integer mu.
 // mu is a 16-bit counter incremented by l in each iteration in algorithm 7, sign_internal.
 // output: vector y \in R^l
-pub fn expand_mask(rho: &[u8; 64], counter: u16) -> [[i32; 256]; L] {
-    let mut y = [[0i32; 256]; L];
+pub fn expand_mask(rho: &[u8; 64], counter: u16) -> [[i32; N]; L] {
+    let mut y = [[0i32; N]; L];
     const C: usize = GAMMA1_COEFFICIENT_POLY_LEN;
     for l in 0..L {
         let mut v = [0u8; 32*C];
@@ -36,8 +36,8 @@ pub fn expand_mask(rho: &[u8; 64], counter: u16) -> [[i32; 256]; L] {
     y
 }
 
-pub fn bit_unpack_gamma(v: &[u8; 32*GAMMA1_COEFFICIENT_POLY_LEN]) -> [i32; 256] {
-    let mut r = [0i32; 256];
+pub fn bit_unpack_gamma(v: &[u8; 32*GAMMA1_COEFFICIENT_POLY_LEN]) -> [i32; N] {
+    let mut r = [0i32; N];
     #[cfg(feature="ML_DSA_44")]
     // GAMMA1 = (1 << 17)
     for i in 0..N/4 {

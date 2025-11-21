@@ -36,31 +36,31 @@ fn key_gen_internal(xi: &[u8; 32]) -> ([u8; LEN_PUBLIC_KEY], [u8; LEN_PRIVATE_KE
     // Expand matrix.
     let a_hat = expand_a(&rho);
     // Sample short vectors s1 and s2.
-    let (s1, s2): ([[i32; 256]; L], [[i32; 256]; K]) = expand_s(&rho_prime);
-    let mut s1_hat = [[0i32; 256]; L];
+    let (s1, s2): ([[i32; N]; L], [[i32; N]; K]) = expand_s(&rho_prime);
+    let mut s1_hat = [[0i32; N]; L];
     for (i, cv) in s1.iter().enumerate() {
         s1_hat[i] = ntt(&cv);
     }
     // multiply a_hat and s1_hat
-    let mut prod_a_s1 =  [[0i32; 256]; K];
+    let mut prod_a_s1 =  [[0i32; N]; K];
     for (i, a_row_poly) in a_hat.iter().enumerate() {
         for (k, s1_col_poly) in s1_hat.iter().enumerate() {
             prod_a_s1[i] = ntt_add(&prod_a_s1[i], &ntt_multiply(&a_row_poly[k], &s1_col_poly))
         }
     }
     let r = prod_a_s1.map(|v| ntt_inverse(&v));
-    let t: [[i32; 256]; K] = std::array::from_fn(|i| vec_add(&r[i], &s2[i]));
+    let t: [[i32; N]; K] = std::array::from_fn(|i| vec_add(&r[i], &s2[i]));
 
-    let mut t0 = [[0i32; 256]; K];
-    let mut t1 = [[0i32; 256]; K];
+    let mut t0 = [[0i32; N]; K];
+    let mut t1 = [[0i32; N]; K];
     for (i, t_vec) in t.iter().enumerate() {
-        for j in 0..256 {
+        for j in 0..N {
             (t1[i][j], t0[i][j]) = power2round(t_vec[j])
         }
-        for j in 0..256 {
+        for j in 0..N {
             assert!(t1[i][j] < 1024_i32);
         }
-        for j in 0..256 {
+        for j in 0..N {
             assert!(t0[i][j] <= (1 << (D-1)));
         }
     }
@@ -79,7 +79,7 @@ fn key_gen_internal(xi: &[u8; 32]) -> ([u8; LEN_PUBLIC_KEY], [u8; LEN_PRIVATE_KE
 // ML_DSA_65 1952 // 32 + 32*6+10
 // ML_DSA_87 2592 // 32 + 32*8+10
 
-fn pk_encode(rho: &[u8; 32], t1: &[[i32; 256]; K]) -> [u8; LEN_PUBLIC_KEY]{
+fn pk_encode(rho: &[u8; 32], t1: &[[i32; N]; K]) -> [u8; LEN_PUBLIC_KEY]{
     let mut pk = [0u8; LEN_PUBLIC_KEY];
     pk[0..32].copy_from_slice(rho);
     for i in 0..K {
@@ -91,8 +91,8 @@ fn pk_encode(rho: &[u8; 32], t1: &[[i32; 256]; K]) -> [u8; LEN_PUBLIC_KEY]{
 }
 
 pub fn sk_encode(rho: &[u8; 32], key: &[u8; 32], tr: &[u8; 64],
-             s1: &[[i32; 256]; L], s2: &[[i32; 256]; K],
-             t0: &[[i32; 256]; K]) -> [u8; LEN_PRIVATE_KEY] {
+             s1: &[[i32; N]; L], s2: &[[i32; N]; K],
+             t0: &[[i32; N]; K]) -> [u8; LEN_PRIVATE_KEY] {
     let mut sk = [0u8; LEN_PRIVATE_KEY];
     sk[0..32].copy_from_slice(rho);
     sk[32..64].copy_from_slice(key);
@@ -114,7 +114,7 @@ pub fn sk_encode(rho: &[u8; 32], key: &[u8; 32], tr: &[u8; 64],
     sk
 }
 
-fn bit_pack_t0(t0: &[i32; 256]) -> [u8; LEN_T0_PACK_POLY] {
+fn bit_pack_t0(t0: &[i32; N]) -> [u8; LEN_T0_PACK_POLY] {
     let mut t = [0i32; 8];
     let mut r = [0i32; LEN_T0_PACK_POLY];
 
@@ -154,11 +154,11 @@ fn bit_pack_t0(t0: &[i32; 256]) -> [u8; LEN_T0_PACK_POLY] {
 }
 
 #[inline]
-fn bit_pack_eta(w: &[i32; 256]) -> [u8; LEN_ETA_PACK_POLY] {
+fn bit_pack_eta(w: &[i32; N]) -> [u8; LEN_ETA_PACK_POLY] {
     let mut t = [0i32; 8];
     let mut r = [0i32; LEN_ETA_PACK_POLY];
 
-    for i in 0..256 {
+    for i in 0..N {
         if !(w[i] >= -(ETA as i32) && w[i] <= ETA as i32) {
             assert!(w[i] >= -(ETA as i32) && w[i] <= ETA as i32)
         }
@@ -196,7 +196,7 @@ fn bit_pack_eta(w: &[i32; 256]) -> [u8; LEN_ETA_PACK_POLY] {
 //   coefficients into groups of 1023 bits.
 // input: B = 1023 and w= \in R such that coefficients are all in [0, 1023].
 #[inline]
-fn simple_bit_pack_t1(a: &[i32; 256]) -> [u8; 32 * 10] {
+fn simple_bit_pack_t1(a: &[i32; N]) -> [u8; 32 * 10] {
     const B: u32 = 1023;
     for i in 0..N/4 {
         assert!((a[4*i+0] as u32) <= B);
@@ -224,14 +224,14 @@ fn simple_bit_pack_t1(a: &[i32; 256]) -> [u8; 32 * 10] {
     r
 }
 
-fn vec_add(a: &[i32; 256], b: &[i32; 256]) -> [i32; 256] {
+fn vec_add(a: &[i32; N], b: &[i32; N]) -> [i32; N] {
     ntt_add(a, b)
 }
 
 
-fn expand_s(r: &[u8; 64]) -> ([[i32; 256]; L], [[i32; 256]; K]) {
-    let mut s1 = [[0i32; 256]; L];
-    let mut s2 = [[0i32; 256]; K];
+fn expand_s(r: &[u8; 64]) -> ([[i32; N]; L], [[i32; N]; K]) {
+    let mut s1 = [[0i32; N]; L];
+    let mut s2 = [[0i32; N]; K];
     let mut rho = [0u8; 66];
     rho[0..64].copy_from_slice(r);
     rho[65] = 0; // rho[64..65] = IntegerToBytes(r, 2)
@@ -249,13 +249,13 @@ fn expand_s(r: &[u8; 64]) -> ([[i32; 256]; L], [[i32; 256]; K]) {
 // q = 2^23 - 2^13 + 1 = 8380417.
 // returns an element in Z_q which fits in 3 bytes.
 // this is a polynomial in the NTT form.
-pub(crate) fn reg_ntt_poly(seed:[u8; 34]) -> [i32; 256] {
+pub(crate) fn reg_ntt_poly(seed:[u8; 34]) -> [i32; N] {
     let mut j = 0usize;
     let mut g = sha3::Shake128::default();
     g.update(&seed);
     let mut xof = g.finalize_xof();
-    let mut poly = [0i32; 256];
-    while j < 256 {
+    let mut poly = [0i32; N];
+    while j < N {
         let mut s = [0u8; 3];
         xof.read(&mut s);
         if let Ok(z_q) = coefficient_from_three_bytes(s[0], s[1], s[2]) {
@@ -267,13 +267,13 @@ pub(crate) fn reg_ntt_poly(seed:[u8; 34]) -> [i32; 256] {
     poly
 }
 
-fn reg_bounded_poly(rho: [u8; 66]) -> [i32; 256] {
-    let mut poly = [0i8; 256];
+fn reg_bounded_poly(rho: [u8; 66]) -> [i32; N] {
+    let mut poly = [0i8; N];
     let mut h = Shake256::default();
     h.update(&rho);
     let mut xof = h.finalize_xof();
     let mut j = 0usize;
-    while j < 256 {
+    while j < N {
         let mut z = [0u8];
         xof.read(&mut z);
         let rz0 = coefficient_from_half_byte(z[0] & 0x0F);
@@ -282,7 +282,7 @@ fn reg_bounded_poly(rho: [u8; 66]) -> [i32; 256] {
             poly[j] = z0;
             j += 1;
         }
-        if let Ok(z1) = rz1 && j < 256 {
+        if let Ok(z1) = rz1 && j < N {
             poly[j] = z1;
             j += 1;
         }

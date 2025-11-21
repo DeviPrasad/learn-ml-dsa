@@ -1,6 +1,6 @@
-use crate::params::Q;
+use crate::params::{N, Q};
 
-const ZETA: [i32; 256] = [
+const ZETA: [i32; N] = [
     0, 4808194, 3765607, 3761513, 5178923, 5496691, 5234739, 5178987,
     7778734, 3542485, 2682288, 2129892, 3764867, 7375178, 557458, 7159240,
     5010068, 4317364, 2663378, 6705802, 4855975, 7946292, 676590, 7044481,
@@ -91,13 +91,13 @@ pub fn mod_q(x: i64) -> i32 {
     r + ((r >> 31) & Q)
 }
 
-pub fn ntt(w: &[i32; 256]) -> [i32; 256] {
-    fn _ntt_impl_(wh: &mut [i64; 256]) -> [i32; 256] {
+pub fn ntt(w: &[i32; N]) -> [i32; N] {
+    fn _ntt_impl_(wh: &mut [i64; N]) -> [i32; N] {
         let mut m = 0;
         let mut len = 128_usize;
         while len >= 1 {
             let mut start = 0_usize;
-            while start < 256 {
+            while start < N {
                 m += 1;
                 let z = ZETA[m] as i64;
                 for j in start..start + len {
@@ -114,13 +114,13 @@ pub fn ntt(w: &[i32; 256]) -> [i32; 256] {
     _ntt_impl_(&mut w.map(|x| x as i64))
 }
 
-pub fn ntt_inverse(wh: &[i32; 256]) -> [i32; 256] {
-    fn _ntt_inverse_impl_(w: &mut [i64; 256]) -> [i32; 256] {
+pub fn ntt_inverse(wh: &[i32; N]) -> [i32; N] {
+    fn _ntt_inverse_impl_(w: &mut [i64; N]) -> [i32; N] {
         let mut m = 256_usize;
         let mut len = 1_usize;
-        while len < 256 {
+        while len < N {
             let mut start = 0_usize;
-            while start < 256 {
+            while start < N {
                 m -= 1;
                 let z = -ZETA[m] as i64;
                 for j in start..start + len {
@@ -138,41 +138,53 @@ pub fn ntt_inverse(wh: &[i32; 256]) -> [i32; 256] {
     _ntt_inverse_impl_(&mut wh.map(|x| x as i64))
 }
 
-pub fn ntt_add(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+pub fn ntt_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
     std::array::from_fn(|i| mod_q((ah[i] + bh[i]) as i64))
 }
 
-pub fn ntt_sub(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+pub fn ntt_sub(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
     std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
 }
 
-pub fn ntt_multiply(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+pub fn ntt_neg_vec<const D: usize>(v: &[[i32; N]; D]) -> [[i32; N]; D] {
+    let mut r = [[0i32; N]; D];
+    for i in 0..D {
+        r[i] = ntt_neg(&v[i]);
+    }
+    r
+}
+
+pub fn ntt_neg(w: &[i32; N]) -> [i32; N] {
+    std::array::from_fn(|i| mod_q(-w[i] as i64))
+}
+
+pub fn ntt_multiply(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
     std::array::from_fn(|i| mod_q(ah[i] as i64 * bh[i] as i64))
 }
 
-pub fn poly_sub(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+pub fn poly_sub(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
     std::array::from_fn(|i| ah[i] - bh[i])
 }
 
-pub fn poly_add(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+pub fn poly_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
     std::array::from_fn(|i| ah[i] + bh[i])
 }
 
 #[cfg(test)]
 mod ntt_tests {
     use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ZETA};
-    use crate::params::Q;
+    use crate::params::{N, Q};
 
     #[test]
     fn test_zetas_less_than_q() {
-        for i in 0..256 {
+        for i in 0..N {
             assert!(ZETA[i] < Q);
         }
     }
     #[test]
     fn test_ntt_conv_01() {
         // 1 + 200x + 300x^2 + 0^254 + 0^255;
-        let mut w = [0i32; 256];
+        let mut w = [0i32; N];
         w[0] = mod_q(Q as i64 - 1);
         w[1] = 200;
         w[2] = 300;
@@ -191,8 +203,8 @@ mod ntt_tests {
 
     #[test]
     fn test_ntt_add_01() {
-        let a: [i32; 256] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
-        let b: [i32; 256] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let a: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let b: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
         let r0 = ntt_inverse(&ntt_add(&ntt(&a), &ntt(&b)));
         let r1 = std::array::from_fn(|i| mod_q((a[i] + b[i]) as i64));
         assert_eq!(r0, r1);
@@ -201,14 +213,14 @@ mod ntt_tests {
 
     #[test]
     fn test_ntt_mult_01() {
-        let a: [i32; 256] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
-        let mut b = [0i32; 256];
+        let a: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let mut b = [0i32; N];
         b[0] = 256;
-        let expected: [i32; 256] = std::array::from_fn(|i| mod_q((256 * a[i]) as i64));
-        for i in 1..256 {
+        let expected: [i32; N] = std::array::from_fn(|i| mod_q((256 * a[i]) as i64));
+        for i in 1..N {
             assert!(a[i] >= 0 && a[i] < Q)
         }
-        for i in 1..256 {
+        for i in 1..N {
             assert!(b[i] >= 0 && b[i] < Q)
         }
         let r0 = ntt_inverse(&ntt_multiply(&ntt(&a), &ntt(&b)));

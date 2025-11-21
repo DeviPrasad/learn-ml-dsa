@@ -10,6 +10,7 @@ pub enum MlDsaError {
     MalformedShortVector,
     MalformedVector,
     SignCtxLenTooLong,
+    SignatureAborted,
 }
 
 impl From<TryFromSliceError> for MlDsaError {
