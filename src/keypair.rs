@@ -4,6 +4,7 @@ use crate::params::{N, Q, D, ETA, K, L, LEN_ETA_PACK_POLY, LEN_PRIVATE_KEY, LEN_
 use getrandom;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
+use crate::xpand::expand_a;
 
 // https://github.com/post-quantum-cryptography/KAT/blob/main/MLDSA/kat_MLDSA_44_hedged_raw.rsp
 pub fn key_gen() -> Result<([u8; LEN_PUBLIC_KEY], [u8; LEN_PRIVATE_KEY]), MlDsaError>{
@@ -82,13 +83,14 @@ fn pk_encode(rho: &[u8; 32], t1: &[[i32; 256]; K]) -> [u8; LEN_PUBLIC_KEY]{
     let mut pk = [0u8; LEN_PUBLIC_KEY];
     pk[0..32].copy_from_slice(rho);
     for i in 0..K {
-        let t_packed = simple_bit_pack(&t1[i], 1023); // 2^(bitlen(q-1)-d) - 1 = 2^10 - 1 = 1023
+        // hidden constant parameter: B = (2^(bitlen(q-1)-d) - 1) = (2^10 - 1) = 1023.
+        let t_packed = simple_bit_pack_t1(&t1[i]);
         pk[32+(i*320)..][..320].copy_from_slice(&t_packed)
     }
     pk
 }
 
-fn sk_encode(rho: &[u8; 32], key: &[u8; 32], tr: &[u8; 64],
+pub fn sk_encode(rho: &[u8; 32], key: &[u8; 32], tr: &[u8; 64],
              s1: &[[i32; 256]; L], s2: &[[i32; 256]; K],
              t0: &[[i32; 256]; K]) -> [u8; LEN_PRIVATE_KEY] {
     let mut sk = [0u8; LEN_PRIVATE_KEY];
@@ -116,7 +118,7 @@ fn bit_pack_t0(t0: &[i32; 256]) -> [u8; LEN_T0_PACK_POLY] {
     let mut t = [0i32; 8];
     let mut r = [0i32; LEN_T0_PACK_POLY];
 
-    for i in 0..N as usize/8 {
+    for i in 0..N/8 {
         t[0] = (1 << (D-1)) - t0[8*i+0];
         t[1] = (1 << (D-1)) - t0[8*i+1];
         t[2] = (1 << (D-1)) - t0[8*i+2];
@@ -151,6 +153,7 @@ fn bit_pack_t0(t0: &[i32; 256]) -> [u8; LEN_T0_PACK_POLY] {
     r.map(|x| x as u8)
 }
 
+#[inline]
 fn bit_pack_eta(w: &[i32; 256]) -> [u8; LEN_ETA_PACK_POLY] {
     let mut t = [0i32; 8];
     let mut r = [0i32; LEN_ETA_PACK_POLY];
@@ -162,7 +165,7 @@ fn bit_pack_eta(w: &[i32; 256]) -> [u8; LEN_ETA_PACK_POLY] {
     }
 
     #[cfg(any(feature="ML_DSA_44", feature="ML_DSA_87"))]
-    for i in 0..N as usize/8 {
+    for i in 0..N/8 {
         t[0] = ETA as i32 - w[8*i+0];
         t[1] = ETA as i32 - w[8*i+1];
         t[2] = ETA as i32 - w[8*i+2];
@@ -187,16 +190,23 @@ fn bit_pack_eta(w: &[i32; 256]) -> [u8; LEN_ETA_PACK_POLY] {
     r.map(|x| x as u8)
 }
 
-fn simple_bit_pack(a: &[i32; 256], b: u32) -> [u8; 32 * 10] {
-    for i in 0..N as usize/4 {
-        assert!((a[4*i+0] as u32) <= b);
-        assert!((a[4*i+1] as u32) <= b);
-        assert!((a[4*i+2] as u32) <= b);
-        assert!((a[4*i+3] as u32) <= b);
+
+// simple_bit_pack encodes a polynomial into a byte string.
+// simple_bit_pack_t1 is specifically tailored to pack public key component t1's
+//   coefficients into groups of 1023 bits.
+// input: B = 1023 and w= \in R such that coefficients are all in [0, 1023].
+#[inline]
+fn simple_bit_pack_t1(a: &[i32; 256]) -> [u8; 32 * 10] {
+    const B: u32 = 1023;
+    for i in 0..N/4 {
+        assert!((a[4*i+0] as u32) <= B);
+        assert!((a[4*i+1] as u32) <= B);
+        assert!((a[4*i+2] as u32) <= B);
+        assert!((a[4*i+3] as u32) <= B);
     }
 
     let mut r = [0u8; 32 * 10];
-    for i in 0..N as usize/4 {
+    for i in 0..N/4 {
         r[5*i+0] = ((a[4*i+0]) >> 0) as u8;
         r[5*i+1] = (((a[4*i+0]) >> 8) | ((a[4*i+1]) << 2)) as u8;
         r[5*i+2] = (((a[4*i+1]) >> 6) | ((a[4*i+2]) << 4)) as u8;
@@ -204,12 +214,12 @@ fn simple_bit_pack(a: &[i32; 256], b: u32) -> [u8; 32 * 10] {
         r[5*i+4] = ((a[4*i+3]) >> 2) as u8;
     }
 
-    for i in 0..N as usize/4 {
-        assert!((r[5*i+0] as u32) < b);
-        assert!((r[5*i+1] as u32) < b);
-        assert!((r[5*i+2] as u32) < b);
-        assert!((r[5*i+3] as u32) < b);
-        assert!((r[5*i+4] as u32) < b);
+    for i in 0..N/4 {
+        assert!((r[5*i+0] as u32) < B);
+        assert!((r[5*i+1] as u32) < B);
+        assert!((r[5*i+2] as u32) < B);
+        assert!((r[5*i+3] as u32) < B);
+        assert!((r[5*i+4] as u32) < B);
     }
     r
 }
@@ -218,20 +228,6 @@ fn vec_add(a: &[i32; 256], b: &[i32; 256]) -> [i32; 256] {
     ntt_add(a, b)
 }
 
-fn expand_a(seed: &[u8; 32]) -> [[[i32; 256]; L]; K] {
-    let mut a_hat: [[[i32; 256]; L]; K] = [[[0i32; 256]; L]; K];
-    let mut rp = [0u8; 34];
-    rp[0..32].copy_from_slice(seed);
-    for r in 0..K {
-        for s in 0..L {
-            rp[32] = s as u8;
-            rp[33] = r as u8;
-            let z_q = reg_ntt_poly(rp);
-            a_hat[r][s] = z_q;
-        }
-    }
-    a_hat
-}
 
 fn expand_s(r: &[u8; 64]) -> ([[i32; 256]; L], [[i32; 256]; K]) {
     let mut s1 = [[0i32; 256]; L];
@@ -253,7 +249,7 @@ fn expand_s(r: &[u8; 64]) -> ([[i32; 256]; L], [[i32; 256]; K]) {
 // q = 2^23 - 2^13 + 1 = 8380417.
 // returns an element in Z_q which fits in 3 bytes.
 // this is a polynomial in the NTT form.
-fn reg_ntt_poly(seed:[u8; 34]) -> [i32; 256] {
+pub(crate) fn reg_ntt_poly(seed:[u8; 34]) -> [i32; 256] {
     let mut j = 0usize;
     let mut g = sha3::Shake128::default();
     g.update(&seed);
@@ -391,10 +387,7 @@ mod nist_acvp_ml_dsa_keygen_kats {
         Ok(results)
     }
 
-    #[cfg(feature = "ML_DSA_44")]
-    #[test]
-    fn key_gen_acvp_nist_ml_dsa_44_tests() {
-        let kats = read_mldsa_nist_acvp_kats("./kats/nist-acvp-keygen44-kats.txt").unwrap();
+    fn run_kats(kats: Vec<(String, String, String, String)>) {
         for (_id, kat_xi, kat_pk, kat_sk) in kats.iter() {
             let xi: [u8; 32] = hex::decode(&kat_xi).unwrap().try_into().unwrap();
             let kat_pk: [u8; LEN_PUBLIC_KEY] = hex::decode(&kat_pk).unwrap().try_into().unwrap();
@@ -403,34 +396,26 @@ mod nist_acvp_ml_dsa_keygen_kats {
             assert_eq!(pk, kat_pk);
             assert_eq!(sk, kat_sk);
         }
+    }
+    #[cfg(feature = "ML_DSA_44")]
+    #[test]
+    fn key_gen_acvp_nist_ml_dsa_44_tests() {
+        let kats = read_mldsa_nist_acvp_kats("./kats/nist-acvp-keygen44-kats.txt").unwrap();
+        run_kats(kats)
     }
 
     #[cfg(feature = "ML_DSA_65")]
     #[test]
     fn key_gen_acvp_nist_ml_dsa_65_tests() {
         let kats = read_mldsa_nist_acvp_kats("./kats/nist-acvp-keygen65-kats.txt").unwrap();
-        for (_id, kat_xi, kat_pk, kat_sk) in kats.iter() {
-            let xi: [u8; 32] = hex::decode(&kat_xi).unwrap().try_into().unwrap();
-            let kat_pk: [u8; LEN_PUBLIC_KEY] = hex::decode(&kat_pk).unwrap().try_into().unwrap();
-            let kat_sk: [u8; LEN_PRIVATE_KEY] = hex::decode(&kat_sk).unwrap().try_into().unwrap();
-            let (pk, sk) = key_gen_internal(&xi);
-            assert_eq!(pk, kat_pk);
-            assert_eq!(sk, kat_sk);
-        }
+        run_kats(kats)
     }
 
     #[cfg(feature = "ML_DSA_87")]
     #[test]
     fn key_gen_acvp_nist_ml_dsa_87_tests() {
         let kats = read_mldsa_nist_acvp_kats("./kats/nist-acvp-keygen87-kats.txt").unwrap();
-        for (_id, kat_xi, kat_pk, kat_sk) in kats.iter() {
-            let xi: [u8; 32] = hex::decode(&kat_xi).unwrap().try_into().unwrap();
-            let kat_pk: [u8; LEN_PUBLIC_KEY] = hex::decode(&kat_pk).unwrap().try_into().unwrap();
-            let kat_sk: [u8; LEN_PRIVATE_KEY] = hex::decode(&kat_sk).unwrap().try_into().unwrap();
-            let (pk, sk) = key_gen_internal(&xi);
-            assert_eq!(pk, kat_pk);
-            assert_eq!(sk, kat_sk);
-        }
+        run_kats(kats)
     }
 }
 

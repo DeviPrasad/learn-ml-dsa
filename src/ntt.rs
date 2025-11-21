@@ -142,8 +142,20 @@ pub fn ntt_add(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
     std::array::from_fn(|i| mod_q((ah[i] + bh[i]) as i64))
 }
 
+pub fn ntt_sub(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+    std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
+}
+
 pub fn ntt_multiply(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
     std::array::from_fn(|i| mod_q(ah[i] as i64 * bh[i] as i64))
+}
+
+pub fn poly_sub(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+    std::array::from_fn(|i| ah[i] - bh[i])
+}
+
+pub fn poly_add(ah: &[i32; 256], bh: &[i32; 256]) -> [i32; 256] {
+    std::array::from_fn(|i| ah[i] + bh[i])
 }
 
 #[cfg(test)]
