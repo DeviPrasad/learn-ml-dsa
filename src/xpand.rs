@@ -26,12 +26,15 @@ pub fn expand_mask(rho: &[u8; 64], counter: u16) -> [[i32; N]; L] {
     let mut y = [[0i32; N]; L];
     const C: usize = GAMMA1_COEFFICIENT_POLY_LEN;
     for l in 0..L {
-        let mut v = [0u8; 32*C];
-        let mut h = sha3::Shake256::default();
-        h.update(rho);
-        h.update(&(counter + l as u16).to_le_bytes());
-        h.finalize_xof_into(&mut v);
-        y[l] = bit_unpack_gamma(&v);
+        let mut val = [0u8; 32*C];
+        {
+            let mut h = sha3::Shake256::default();
+            h.update(rho);
+            let sum: u16 = counter + l as u16;
+            h.update(&sum.to_le_bytes());
+            h.finalize_xof_into(&mut val);
+        }
+        y[l].copy_from_slice(&bit_unpack_gamma(&val));
     }
     y
 }
@@ -77,7 +80,7 @@ pub fn bit_unpack_gamma(v: &[u8; 32*GAMMA1_COEFFICIENT_POLY_LEN]) -> [i32; N] {
         r[2*i+1]  = (v[5*i+2] as i32) >> 4;
         r[2*i+1] |= (v[5*i+3] as i32) << 4;
         r[2*i+1] |= (v[5*i+4] as i32) << 12;
-        /* r[2*i+1] &= 0xFFFFF; */ /* No effect, since we're anyway at 20 bits */
+        r[2*i+1] &= 0xFFFFF; /* No effect, since we're anyway at 20 bits */
 
         r[2*i+0] = GAMMA1 as i32 - r[2*i+0];
         r[2*i+1] = GAMMA1 as i32 - r[2*i+1];

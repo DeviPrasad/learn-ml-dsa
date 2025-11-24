@@ -9,7 +9,7 @@ fn main() {
     let (_, sk) = keypair::key_gen().unwrap();
     let _ = sign::sk_decode(&sk).unwrap();
     let msg = hex::decode("20a7b7e10f70496cc38220b944def699").unwrap();
-    let _sig = sign::sign(&sk, &msg, &[1,2,3]).unwrap();
+    let _sig = sign::sign(&sk, &msg).unwrap();
 }
 
 #[cfg(test)]
@@ -48,11 +48,11 @@ mod tests {
 
     #[test]
     fn test_signing() {
-        for _ in 0..16 {
+        for _ in 0..32 {
             let (_, sk) = keypair::key_gen().unwrap();
             let _ = sign::sk_decode(&sk).unwrap();
-            let msg = hex::decode("20a7b7e10f70496cc38220b944def699").unwrap();
-            let _sig = sign::sign(&sk, &msg, &"aa_fiu_v2.0_FI_request".as_bytes()).unwrap();
+            let msg = hex::decode("20a7b7e10f70496cc38220b944def69920a7b7e10f70496cc38220b944def699").unwrap();
+            let _sig = sign::sign(&sk, &msg).unwrap();
         }
     }
 

@@ -260,7 +260,7 @@ pub(crate) fn reg_ntt_poly(seed:[u8; 34]) -> [i32; N] {
         xof.read(&mut s);
         if let Ok(z_q) = coefficient_from_three_bytes(s[0], s[1], s[2]) {
             assert!(z_q < Q);
-            poly[j] = z_q; // mod_q(z_q as i64);
+            poly[j] = z_q;
             j += 1;
         }
     }

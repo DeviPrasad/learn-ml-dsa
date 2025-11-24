@@ -67,7 +67,7 @@ pub const ETA: u8 = 2;
 #[cfg(feature = "ML_DSA_87")]
 pub const BITLEN_2_ETA: usize = 3; // bitlen(2*2) = bitlen(b100) = 3.
 #[cfg(feature = "ML_DSA_87")]
-pub const LAMBDA: usize = N; // collision strength of c-tilda.
+pub const LAMBDA: usize = 256; // collision strength of c-tilda.
 #[cfg(feature = "ML_DSA_87")]
 pub const GAMMA1: u32 = 1 << 19; // coefficient range of y = 2^19.
 #[cfg(feature = "ML_DSA_87")]

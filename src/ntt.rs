@@ -116,7 +116,7 @@ pub fn ntt(w: &[i32; N]) -> [i32; N] {
 
 pub fn ntt_inverse(wh: &[i32; N]) -> [i32; N] {
     fn _ntt_inverse_impl_(w: &mut [i64; N]) -> [i32; N] {
-        let mut m = 256_usize;
+        let mut m = N;
         let mut len = 1_usize;
         while len < N {
             let mut start = 0_usize;
@@ -155,6 +155,7 @@ pub fn ntt_neg_vec<const D: usize>(v: &[[i32; N]; D]) -> [[i32; N]; D] {
 }
 
 pub fn ntt_neg(w: &[i32; N]) -> [i32; N] {
+    // td::array::from_fn(|i| mod_q(-w[i] as i64))
     std::array::from_fn(|i| mod_q(-w[i] as i64))
 }
 
@@ -163,11 +164,12 @@ pub fn ntt_multiply(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
 }
 
 pub fn poly_sub(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+    // std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
     std::array::from_fn(|i| ah[i] - bh[i])
 }
 
 pub fn poly_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
-    std::array::from_fn(|i| ah[i] + bh[i])
+    std::array::from_fn(|i| mod_q((ah[i] + bh[i]) as i64))
 }
 
 #[cfg(test)]
