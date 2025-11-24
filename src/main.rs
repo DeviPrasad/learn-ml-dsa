@@ -4,6 +4,9 @@ mod params;
 mod ntt;
 mod sign;
 mod xpand;
+mod keygen_kat;
+mod sign_with_ctx_kat;
+mod sign_test;
 
 fn main() {
     let (_, sk) = keypair::key_gen().unwrap();
