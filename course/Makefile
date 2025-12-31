@@ -1,13 +1,20 @@
+html: ntt32 prt
+	echo "HTML build complete."
 
-ntt32: ntt32.md md.yaml style.css
-	pandoc ntt32.md --metadata-file=md.yaml --mathjax --standalone --css=style.css --syntax-highlighting=tango -f markdown -t html -o ntt32.html
+pdf: ntt32-pdf prt-pdf
+	echo "PDF build complete."
 
-ntt32-pdf-prior: ntt32.md md.yaml style.css
-	pandoc ntt32.md --log=pandoc.log -o ntt32.tex --pdf-engine=xelatex -M link-citations=true --citeproc --metadata-file=md.yaml --standalone -M link-citations=true --citeproc --template eisvogel --from markdown --syntax-highlighting=idiomatic -V linkcolor=blue -V header-includes:'\usepackage{amsmath,amscd} \usepackage{hyperref} \usepackage{tikz} \usepackage{lscape} \usepackage{everypage} \usepackage[export]{adjustbox} \let\includegraphicsbak\includegraphics \renewcommand*{\includegraphics}[2][]{\includegraphicsbak[frame,#1]{#2}}' -o ntt32.pdf
+ntt32: ntt32.md ntt.yaml style.css
+	pandoc ntt32.md --metadata-file=ntt.yaml --mathjax --standalone --number-sections --css=style.css --syntax-highlighting=tango -f markdown -t html -o ntt32.html
 
-ntt32-pdf: ntt32.md md.yaml style.css
-	pandoc ntt32.md --log=pandoc.log -o ntt32.tex --pdf-engine=xelatex --syntax-highlighting=tango  -M link-citations=true --citeproc --metadata-file=md.yaml --standalone -M link-citations=true --citeproc --template eisvogel --from markdown --syntax-highlighting=idiomatic -V linkcolor=blue -V header-includes:'\usepackage{amsmath,amscd} \usepackage{hyperref} \usepackage{tikz} \usepackage{pdflscape} \usepackage{afterpage} \usepackage[export]{adjustbox} \let\includegraphicsbak\includegraphics \renewcommand*{\includegraphics}[2][]{\includegraphicsbak[frame,#1]{#2}}' -o ntt32.pdf
+prt: prt.md poly-math.yaml style.css
+	pandoc prt.md --metadata-file=poly-math.yaml --mathjax --standalone --number-sections --css=style.css --syntax-highlighting=tango -f markdown -t html -o prt.html
 
+ntt32-pdf: ntt32.md ntt.yaml
+	pandoc ntt32.md --log=pandoc.log --pdf-engine=xelatex --metadata-file=ntt.yaml --syntax-highlighting=tango -o ntt32.pdf
+
+prt-pdf: prt.md poly-math.yaml
+	pandoc prt.md --log=pandoc.log --pdf-engine=xelatex --metadata-file=poly-math.yaml --syntax-highlighting=tango -o prt.pdf
 
 clean:
 	rm -f ntt32.html

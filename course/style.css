@@ -204,3 +204,9 @@ code.sourceCode {
 #hide {
     display: none;
 }
+
+.centered-picture {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

@@ -9,7 +9,29 @@
     <script src="https://tikzjax.com/v1/tikzjax.js"></script>
 </head>
 
+# Efficient Implementation of Polynomial Arithmetic
 Number Theoretic Transforms (NTTs) are integral to the ML DSA specification. The NTT representation enables efficient polynomial addition, subtraction, and multiplication. In this section, we develop all the key ideas behind NTTs in a step-by-step fashion. To illustrate these concepts, we define *Tiny DSA*, a simplified system that follows the ML-DSA structure. This development draws heavily from Prof. Alfred Menezes' excellent notes and videos.
+
+## Polynomial Reduction
+Let $a(x) \in R_q$ be a polynomial of degree $\le$ 31. We can reorganize the terms in $a(x)$ into two distinct polynomials. The first polynomial, $a_L(x)$, contains terms with degree $0 \le d \le 15$:
+$$
+    {\color{NavyBlue}{\mathbf{a_L(x)}}} = a_0 + a_1 x + a_2 x^2 + \ldots + a_{15} x^{15} \in R_q
+$$
+
+The second polynomial, $a_r(x)$ has terms with degree $16 \le d \le 31$:
+$$
+\begin{array}{lll}
+    a_r(x) & = & a_{16}x^{16} + a_{17} x^{17} + a_{18} x^{18} + \ldots + a_{31} x^{31} \in R_q \\
+           & = & (a_{16} x + a_{17} x^{1} + a_{18} x^{2} + \ldots + a_{31} x^{15}) x^{16} \in R_q \\
+           & = & {\color{NavyBlue}{\mathbf{a_R(x)}}} x^{16} \in R_q \ \ \ where \ {\color{NavyBlue}{\mathbf{a_R(x)}}} = (a_{16} x + a_{17} x^{1} + \ldots + a_{31} x^{15}) x^{16} \\
+\end{array}
+$$
+
+We use this method to repeatedly decompose a polynomial $a(x) \in R_q$ of degree $2n$ into two sub-polynomials each of degree $d$. We stop reducing when we reach factors of degree 1.
+
+$$
+    a(x) = a_L(x) + a_R(x)x^{16} \ \ \ \ a_L(x) \in R_q, \ a_R(x) \in R_q, \ a_L(x) \ \text{and} \ a_R(x) \ \text{have  degree} \le \text{15}.
+$$
 
 ## Tiny DSA - Factoring the Reduction Polynomial $x^{32} + 1$
 In this section we derive the irreducible factors of the reduction polynomial $x^{32} + 1$.
@@ -23,207 +45,377 @@ $$
 \end{array}
 $$
 
-In general, whenever we see a term of the form
+In general, we replace a term of the form
 $$
     x^{m} + \zeta^n \in R_q  \qquad m \ge 1, n \ge 0
 $$
-we can replace it with
+by
 $$
     x^{m} - \zeta^{32 + n}
 $$
+and break this down further till we reach an irreducible term of degree 1, $x \pm z^k \ \, 1 \le k \le 63$. In Tiny DSA, we obtain 32 irreducible terms
 
-### Level 1 - Factors of $x^{32} - \zeta^{32}$
+$$
+\begin{array}{ll}
+    x \pm z^k & \ \, k = 2i+1, \ 0 \le i \le 15. \\
+              & \text{In other words,} \ k \in \{ 1, 3, 5, 7, 9, \ldots, 23, 25, 27, 29, 31 \}.
+\end{array}
+$$
+
+In ML DSA, there are 256 irreducible factors of degree 1:
+$$
+\begin{array}{ll}
+    x \pm z^k & \ k = 2i+1, \ 0 \le i \le 127. \\
+              & \text{In other words,} \ k \in \{ 1, 3, 5, 7, 9, \ldots, 23, 25, 27, 29, 31 \}.
+\end{array}
+$$
+
+### Reducing Polynomial $a(x)$ by the factors of $x^{32} - \zeta^{32}$
+
+This is the first (level 1) reduction of the given polynomial $a(x)$.
 
 ```{=latex}
-\begin{figure}
-\centering
-\begin{tikzpicture}[
-        scale=1.25,
+\noindent
+\begin{minipage}[t]{0.49\textwidth}
+  \begin{tikzpicture}[
+        scale=0.9,
         transform shape,
         level distance=2cm,
         sibling distance=4cm,
-        every label/.style={text=blue, font=\scriptsize}
+        every label/.style={text=blue, font=\small}
     ]
     % root of the expression tree
     \node (root) {$x^{32} - \zeta^{32}$}
         % left
         child {
-            node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            % node[label={[]below:{1}}] (left0) {$x^{16} - \zeta^{16}$}
+            node (left0) {$x^{16} - \zeta^{16}$}
             edge from parent node[left, xshift=-2mm, red] {0}
         }
         % right
         child {
-            node (right) {$x^{16} - \zeta^{48}$}
+            % node (right) {$x^{16} - \zeta^{48}$}
+            node (right1) {$x^{16} + \zeta^{16}$}
             edge from parent node[right, xshift=2mm, red] {1}
         };
-\end{tikzpicture}
-\end{figure}
+  \end{tikzpicture}
+  \captionof{figure}{Step 1 of Polynomial Factoring}
+  \label{fig:ntt-poly-decompose-l1}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.49\textwidth}
+  \centering
+  \begin{tikzpicture}[
+        scale=0.9,
+        transform shape,
+        level distance=2cm,
+        sibling distance=5cm,
+        every label/.style={text=blue, font=\small}
+    ]
+    \node (root) {$a(x)$}
+        child {
+            node [label={above:{$a_0(x)$}}] (left0) {$a(x) \ mod \ (x^{16} - \zeta^{16})$}
+            edge from parent node[left, xshift=-2mm, red] {0}
+        }
+        child {
+            node [label={above:{$a_1(x)$}}] (right1) {$a(x) \ mod \ (x^{16} + \zeta^{16})$}
+            edge from parent node[right, xshift=2mm, red] {1}
+        };
+  \end{tikzpicture}
+  \captionof{figure}{Step 1 of NTT Evaluation}
+  \label{fig:ntt-eval-l1}
+\end{minipage}
 ```
 
+
+```{=html}
+<div class="centered-picture">
 <script type="text/tikz">
-    \begin{tikzpicture}[
+\begin{tikzpicture}[
         scale=1.5,
         transform shape,
         level distance=2cm,
         sibling distance=4cm,
-        every label/.style={text=blue, font=\scriptsize}
+        every label/.style={text=blue, font=\large},
+        every node/.style={font=\small}
     ]
-    % root of the expression tree
-    \node (root) {$x^{32} - \zeta^{32}$}
-        % left
+    \node (root) {$a(x)$}
         child {
-            node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            node [label={[xshift=-3mm, yshift=-1.5mm] above:{$a_0(x)$}}] (left0) {$a(x) \ mod \ (x^{16} - \zeta^{16})$}
             edge from parent node[left, xshift=-2mm, red] {0}
         }
-        % right
         child {
-            node (right) {$x^{16} - \zeta^{48}$}
+            node [label={[xshift=3mm, yshift=-1.5mm] above:{$a_1(x)$}}] (right1) {$a(x) \ mod \ (x^{16} + \zeta^{16})$}
             edge from parent node[right, xshift=2mm, red] {1}
         };
 \end{tikzpicture}
 </script>
+</div>
 
-
-
-### Level 2 - Factors of $x^{16} - \zeta^{16}$ and $x^{16} - \zeta^{48}$
-```{=latex}
-\begin{figure}
-\centering
-\begin{tikzpicture}[
-        scale=1.25,
-        transform shape,
-        level distance=2cm,
-        level 1/.style={sibling distance=8cm},
-        level 2/.style={sibling distance=4cm},
-        every label/.style={text=blue, font=\scriptsize}
-    ]
-    % root of the expression tree
-    \node (root) {$x^{32} - \zeta^{32}$}
-        % left - 0 - x^16-1
-        child {
-            node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
-            % left - 00
-            child {
-                node[label={[]below:{2}}] {$x^{8} - \zeta^{8}$}
-                edge from parent node[left, xshift=-2mm, red] {00}
-            }
-            % right - 01
-            child {
-                node (right01) {$x^{8} - \zeta^{40}$}
-                edge from parent node[right, xshift=2mm, red] {01}
-            }
-            edge from parent node[left, xshift=-3mm, red] {0}
-        }
-        % right -1
-        child {
-            node (right1) {$x^{16} - \zeta^{48}$}
-            % left - 10
-            child {
-                node[label={[]below:{3}}] (left10) {$x^{8} - \zeta^{24}$}
-                edge from parent node[left, xshift=-2mm, red] {10}
-            }
-            % right - 11
-            child {
-                % Renamed from (right) to (right11)
-                node (right11) {$x^{8} - \zeta^{56}$}
-                edge from parent node[right, xshift=2mm, red] {11}
-            }
-            edge from parent node[right, xshift=3mm, red] {1}
-        };
-\end{tikzpicture}
-\end{figure}
-```
-
+<div class="centered-picture" style="margin-top: 1.5cm;">
 <script type="text/tikz">
 \begin{tikzpicture}[
         scale=1.5,
         transform shape,
         level distance=2cm,
-        level 1/.style={sibling distance=7cm},
+        sibling distance=4cm,
+        every label/.style={text=blue, font=\large},
+        every node/.style={font=\large}
+    ]
+    \node (root) {$x^{32} - \zeta^{32}$}
+        child {
+            % node[label={[yshift=0.5mm]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            node (left0) {$x^{16} - \zeta^{16}$}
+            edge from parent node[left, xshift=-2mm, red] {0}
+        }
+        child {
+            % node (right1) {$x^{16} - \zeta^{48}$}
+            % node [label={right:{= $x^{16} - \zeta^{48}$}}] (right1) {$x^{16} + \zeta^{16}$}
+            node (right1) {$x^{16} + \zeta^{16}$}
+            edge from parent node[right, xshift=2mm, red] {1}
+        };
+\end{tikzpicture}
+</script>
+</div>
+<div style="clear: both;"></div>
+<div style="float: none;"></div>
+```
+
+
+$$
+\begin{array}{lll}
+    a_0(x) & = & a(x) \ \text{mod} \ (x^{16} - \zeta^{16}) \\
+           & = & (a_L(x) + a_R(x) \, x^{16}) \ \text{mod} \ (x^{16} - \zeta^{16}) \\
+           & = & a_l(x) + a_R(x) \, \zeta^{16} \ \ \ \ \ \textit{(polynomial remainder theorem)}\\
+           \\
+    a_1(x) & = & a(x) \ \text{mod} \ (x^{16} + \zeta^{16}) \\
+           & = & (a_L(x) + a_R(x) \, x^{16}) \ \text{mod} \ (x^{16} + \zeta^{16}) \\
+           & = & (a_L(x) + a_R(x) \, x^{16}) \ \text{mod} \ (x^{16} - (-\zeta^{16})) \\
+           & = & a_l(x) + a_R(x) \cdot (-\zeta^{16}) \ \ \ \ \ \textit{(polynomial remainder theorem)} \\
+           & = & a_l(x) - a_R(x) \, \zeta^{16}\\
+\end{array}
+$$
+
+
+
+### Level 2 - Factors of $x^{16} - \zeta^{16}$ and $x^{16} - \zeta^{48}$
+We will now factor the smaller-degree polynomials obtained in the previous step:
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+        scale=0.9,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=8cm},
         level 2/.style={sibling distance=4cm},
-        level 3/.style={sibling distance=2cm},
         every label/.style={text=blue, font=\small}
     ]
     % root of the expression tree
     \node (root) {$x^{32} - \zeta^{32}$}
         % left - 0 - x^16-1
         child {
-            node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            % node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            node (left0) {$x^{16} - \zeta^{16}$}
             % left - 00
             child {
-                node[label={[]below:{2}}] {$x^{8} - \zeta^{8}$}
-                child {
-                    % left - x^4 - \zeta^4 - 000
-                    node[label={[text=blue]below:{4}}] {$x^{4} - \zeta^{4}$}
-                    edge from parent node[left, xshift=-1mm, red] {000}
-                }
-                child {
-                    % left - x^4 - \zeta^34 - 001
-                    node (right001) {$x^{8} - \zeta^{36}$}
-                    edge from parent node[right, xshift=1mm, red] {001}
-                }
+                % node[label={[]below:{2}}] {$x^{8} - \zeta^{8}$}
+                node (left00) {$x^{8} - \zeta^{8}$}
                 edge from parent node[left, xshift=-2mm, red] {00}
             }
             % right - 01
             child {
-                node (right01) {$x^{8} - \zeta^{40}$}
-                child {
-                    % left - x^4 - \zeta^4 - 010
-                    node[label={[]below:{5}}] {$x^{4} - \zeta^{20}$}
-                    edge from parent node[left, xshift=-1mm, red] {010}
-                }
-                child {
-                    % left - x^4 - \zeta^34 - 011
-                    node (right011) {$x^{8} - \zeta^{52}$}
-                    edge from parent node[right, xshift=1mm, red] {011}
-                }
+                node (right01) {$x^{8} + \zeta^{8}$}
                 edge from parent node[right, xshift=2mm, red] {01}
             }
             edge from parent node[left, xshift=-3mm, red] {0}
         }
         % right -1
         child {
-            node (right1) {$x^{16} - \zeta^{48}$}
+            % node (right1) {$x^{16} - \zeta^{48}$}
+            node (right1) {$x^{16} + \zeta^{16}$}
             % left - 10
             child {
-                node[label={[]below:{3}}] (left10) {$x^{8} - \zeta^{24}$}
+                % node[label={[]below:{3}}] (left10) {$x^{8} - \zeta^{24}$}
+                node (left10) {$x^{8} - \zeta^{24}$}
                 edge from parent node[left, xshift=-2mm, red] {10}
             }
             % right - 11
             child {
-                % Renamed from (right) to (right11)
-                node (right11) {$x^{8} - \zeta^{56}$}
+                % node (right11) {$x^{8} - \zeta^{56}$}
+                node (right11) {$x^{8} + \zeta^{24}$}
+                edge from parent node[right, xshift=2mm, red] {11}
+            }
+            edge from parent node[right, xshift=3mm, red] {1}
+        };
+\end{tikzpicture}
+\end{center}
+\captionof{figure}{Step 2 of Polynomial Factoring}
+\label{fig:ntt-poly-decompose-l2}
+```
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+        scale=0.9,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=10cm},
+        level 2/.style={sibling distance=5cm},
+        every label/.style={text=blue, font=\small}
+    ]
+    \node (root) {$a(x)$}
+        child {
+            node (left0) {$a_0(x)$}
+            child {
+                node [label={[xshift=-3mm, yshift=-1.5mm] above:{$a_{00}(x)$}}] (left00) {$a_0(x) \ mod \ (x^{8} - \zeta^{8})$}
+                edge from parent node[left, xshift=-2mm, red] {00}
+            }
+            child {
+                node [label={[xshift=3mm, yshift=-1.5mm] above:{$a_{01}(x)$}}] (left01) {$a_0(x) \ mod \ (x^{8} + \zeta^{8})$}
+                edge from parent node[right, xshift=2mm, red] {01}
+            }
+            edge from parent node[left, xshift=-2mm, red] {0}
+        }
+        child {
+            node (right1) {$a_1(x)$}
+            child {
+                node [label={[xshift=-3mm, yshift=-1.5mm] above:{$a_{10}(x)$}}] (right10) {$a_1(x) \ mod \ (x^{8} - \zeta^{24})$}
+                edge from parent node[left, xshift=-2mm, red] {10}
+            }
+            child {
+                node [label={[xshift=3mm, yshift=-1.5mm] above:{$a_{11}(x)$}}] (right11) {$a_1(x) \ mod \ (x^{8} + \zeta^{24})$}
+                edge from parent node[right, xshift=2mm, red] {11}
+            }
+            edge from parent node[right, xshift=2mm, red] {1}
+        };
+\end{tikzpicture}
+\end{center}
+\captionof{figure}{Step 2 of NTT Evaluation}
+\label{fig:ntt-eval-l2}
+```
+
+
+```{=html}
+<div class="centered-picture">
+<script type="text/tikz">
+\begin{tikzpicture}[
+        scale=1.5,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=7.5cm},
+        level 2/.style={sibling distance=4cm},
+        every label/.style={text=blue, font=\large},
+        every node/.style={font=\small}
+    ]
+    \node (root) {$a(x)$}
+        child {
+            node (left0) {$a_0(x)$}
+            child {
+                node [label={[xshift=-3mm, yshift=-1.5mm] above:{$a_{00}(x)$}}] (left00) {$a_0(x) \ mod \ (x^{8} - \zeta^{8})$}
+                edge from parent node[left, xshift=-2mm, red] {00}
+            }
+            child {
+                node [label={[xshift=3mm, yshift=-1.5mm] above:{$a_{01}(x)$}}] (left01) {$a_0(x) \ mod \ (x^{8} + \zeta^{8})$}
+                edge from parent node[right, xshift=2mm, red] {01}
+            }
+            edge from parent node[left, xshift=-2mm, red] {0}
+        }
+        child {
+            node (right1) {$a_1(x)$}
+            child {
+                node [label={[xshift=-3mm, yshift=-1.5mm] above:{$a_{10}(x)$}}] (right10) {$a_1(x) \ mod \ (x^{8} - \zeta^{24})$}
+                edge from parent node[left, xshift=-2mm, red] {10}
+            }
+            child {
+                node [label={[xshift=3mm, yshift=-1.5mm] above:{$a_{11}(x)$}}] (right11) {$a_1(x) \ mod \ (x^{8} + \zeta^{24})$}
+                edge from parent node[right, xshift=2mm, red] {11}
+            }
+            edge from parent node[right, xshift=2mm, red] {1}
+        };
+\end{tikzpicture}
+</script>
+</div>
+
+<div style="clear: both;"></div>
+<div style="float: none; margin-top: 2cm;"></div>
+
+<div class="centered-picture">
+<script type="text/tikz">
+\begin{tikzpicture}[
+        scale=1.5,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=6cm},
+        level 2/.style={sibling distance=3.6cm},
+        every label/.style={text=blue, font=\large},
+        every node/.style={font=\large}
+    ]
+    % root of the expression tree
+    \node (root) {$x^{32} - \zeta^{32}$}
+        % left - 0 - x^16-1
+        child {
+            % node[label={[]below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            node (left0) {$x^{16} - \zeta^{16}$}
+            % left - 00
+            child {
+                node (left00) {$x^{8} - \zeta^{8}$}
+                edge from parent node[left, xshift=-2mm, red] {00}
+            }
+            % right - 01
+            child {
+                node (right01) {$x^{8} + \zeta^{8}$}
+                edge from parent node[right, xshift=2mm, red] {01}
+            }
+            edge from parent node[left, xshift=-3mm, red] {0}
+        }
+        % right -1
+        child {
+            node (right1) {$x^{16} + \zeta^{16}$}
+            % left - 10
+            child {
+                node (left10) {$x^{8} - \zeta^{24}$}
+                edge from parent node[left, xshift=-2mm, red] {10}
+            }
+            % right - 11
+            child {
+                node (right11) {$x^{8} + \zeta^{24}$}
                 edge from parent node[right, xshift=2mm, red] {11}
             }
             edge from parent node[right, xshift=3mm, red] {1}
         };
 \end{tikzpicture}
 </script>
+</div>
+```
 
-### Level 3 - Factors of $x^{8} - \zeta^8, \ x^{8} - \zeta^{40}, \ x^{8} - \zeta^{24}$ and $x^{8} - \zeta^{56}$
+
+### Level 3 - Factors of $x^{8} \pm \zeta^{8}$ and $x^{8} \pm \zeta^{24}$
+
+We use the equalities $x^{8} + \zeta^{8} = x^{8} - \zeta^{40}$ and $x^{8} + \zeta^{24} = x^{8} - \zeta^{56}$ in evaluating the NTT of polynomial $a(x)$.
+
 ```{=latex}
-\begin{figure}
-\centering
+\begin{center}
 \begin{tikzpicture}[
-        scale=1.15,
+        scale=0.9,
         transform shape,
         level distance=2cm,
         level 1/.style={sibling distance=7.5cm},
         level 2/.style={sibling distance=3.75cm},
         level 3/.style={sibling distance=1.8cm},
-        every label/.style={text=blue, font=\scriptsize}
+        every label/.style={text=blue, font=\scriptsize},
     ]
     % root of the expression tree
     \node (root) {$x^{32} - \zeta^{32}$}
         % left - 0 - x^16-1
         child {
-            node[label={below:{1}}] (left) {$x^{16} - \zeta^{16}$}
+            node (left) {$x^{16} - \zeta^{16}$}
             % left - 00
             child {
-                node[label={below:{2}}] {$x^{8} - \zeta^{8}$}
+                node {$x^{8} - \zeta^{8}$}
                 child {
                     % left - x^4 - \zeta^4 - 000
-                    node[label={below:{4}}] {$x^{4} - \zeta^{4}$}
+                    node {$x^{4} - \zeta^{4}$}
                     edge from parent node[left, xshift=-1mm, red] {000}
                 }
                 child {
@@ -238,7 +430,7 @@ $$
                 node (right01) {$x^{8} - \zeta^{40}$}
                 child {
                     % left - x^4 - \zeta^4 - 010
-                    node[label={[]below:{5}}] {$x^{4} - \zeta^{20}$}
+                    node {$x^{4} - \zeta^{20}$}
                     edge from parent node[left, xshift=-1mm, red] {010}
                 }
                 child {
@@ -255,10 +447,10 @@ $$
             node (right1) {$x^{16} - \zeta^{48}$}
             % left - 10
             child {
-                node[label={[]below:{3}}] (left10) {$x^{8} - \zeta^{24}$}
+                node (left10) {$x^{8} - \zeta^{24}$}
                 child {
                     % left - x^4 - \zeta^12 - 100
-                    node[label={[]below:{6}}] {$x^{4} - \zeta^{12}$}
+                    node {$x^{4} - \zeta^{12}$}
                     edge from parent node[left, xshift=-1mm, red] {100}
                 }
                 child {
@@ -274,7 +466,7 @@ $$
                 node (right11) {$x^{8} - \zeta^{56}$}
                 child {
                     % left - x^4 - \zeta^28 - 110
-                    node[label={[]below:{7}}] {$x^{4} - \zeta^{28}$}
+                    node {$x^{4} - \zeta^{28}$}
                     edge from parent node[left, xshift=-1mm, red] {110}
                 }
                 child {
@@ -287,8 +479,176 @@ $$
             edge from parent node[right, xshift=3mm, red] {1}
         };
 \end{tikzpicture}
-\end{figure}
+\end{center}
+\captionof{figure}{Step 3 of Polynomial Factoring}
+\label{fig:ntt-poly-decompose-l3}
 ```
+
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[
+        scale=0.9,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=10cm},
+        level 2/.style={sibling distance=5cm},
+        level 3/.style={sibling distance=2.5cm},
+        every label/.style={text=blue, font=\small}
+    ]
+    \node (root) {$a(x)$}
+        child {
+            node (left0) {$a_0(x)$}
+            child {
+                node (left00) {$a_{00}(x)$}
+                child {
+                    node (left000) {$a_{000}(x)$}
+                    edge from parent node[left, xshift=-2mm, red] {000}
+                }
+                child {
+                    node (right001) {$a_{001}(x)$}
+                    edge from parent node[right, xshift=2mm, red] {001}
+                }
+                edge from parent node[left, xshift=-2mm, red] {00}
+            }
+            child {
+                node (left01) {$a_{01}(x)$}
+                child {
+                    node (left000) {$a_{010}(x)$}
+                    edge from parent node[left, xshift=-2mm, red] {010}
+                }
+                child {
+                    node (right001) {$a_{011}(x)$}
+                    edge from parent node[right, xshift=2mm, red] {011}
+                }
+                edge from parent node[right, xshift=2mm, red] {01}
+            }
+            edge from parent node[left, xshift=-2mm, red] {0}
+        }
+        child {
+            node (right1) {$a_1(x)$}
+            child {
+                node (right10) {$a_1(x)$}
+                child {
+                    node (left100) {$a_{100}(x)$}
+                    edge from parent node[left, xshift=-2mm, red] {100}
+                }
+                child {
+                    node (right101) {$a_{101}(x)$}
+                    edge from parent node[right, xshift=2mm, red] {101}
+                }
+                edge from parent node[left, xshift=-2mm, red] {10}
+            }
+            child {
+                node (right11) {$a_{11}(x)$}
+                child {
+                    node (left110) {$a_{110}(x)$}
+                    edge from parent node[left, xshift=-2mm, red] {110}
+                }
+                child {
+                    node (right111) {$a_{111}(x)$}
+                    edge from parent node[right, xshift=2mm, red] {111}
+                }
+                edge from parent node[right, xshift=2mm, red] {11}
+            }
+            edge from parent node[right, xshift=2mm, red] {1}
+        };
+\end{tikzpicture}
+\end{center}
+\captionof{figure}{Step 3 of NTT Evaluation}
+\label{fig:ntt-eval-l3}
+```
+
+```{=html}
+<div class="centered-picture">
+<script type="text/tikz">
+\begin{tikzpicture}[
+        scale=1.5,
+        transform shape,
+        level distance=2cm,
+        level 1/.style={sibling distance=7.5cm},
+        level 2/.style={sibling distance=3.75cm},
+        level 3/.style={sibling distance=1.8cm},
+        every label/.style={text=blue, font=\large},
+        every node/.style={font=\large}
+]
+    % root of the expression tree
+    \node (root) {$x^{32} - \zeta^{32}$}
+        % left - 0 - x^16-1
+        child {
+            node (left) {$x^{16} - \zeta^{16}$}
+            % left - 00
+            child {
+                node {$x^{8} - \zeta^{8}$}
+                child {
+                    % left - x^4 - \zeta^4 - 000
+                    node {$x^{4} - \zeta^{4}$}
+                    edge from parent node[left, xshift=-1mm, red] {000}
+                }
+                child {
+                    % left - x^4 - \zeta^34 - 001
+                    node (right001) {$x^{4} - \zeta^{36}$}
+                    edge from parent node[right, xshift=1mm, red] {001}
+                }
+                edge from parent node[left, xshift=-2mm, red] {00}
+            }
+            % right - 01
+            child {
+                node (right01) {$x^{8} - \zeta^{40}$}
+                child {
+                    % left - x^4 - \zeta^4 - 010
+                    node {$x^{4} - \zeta^{20}$}
+                    edge from parent node[left, xshift=-1mm, red] {010}
+                }
+                child {
+                    % left - x^4 - \zeta^34 - 011
+                    node (right011) {$x^{4} - \zeta^{52}$}
+                    edge from parent node[right, xshift=1mm, red] {011}
+                }
+                edge from parent node[right, xshift=2mm, red] {01}
+            }
+            edge from parent node[left, xshift=-3mm, red] {0}
+        }
+        % right -1
+        child {
+            node (right1) {$x^{16} - \zeta^{48}$}
+            % left - 10
+            child {
+                node (left10) {$x^{8} - \zeta^{24}$}
+                child {
+                    % left - x^4 - \zeta^12 - 100
+                    node {$x^{4} - \zeta^{12}$}
+                    edge from parent node[left, xshift=-1mm, red] {100}
+                }
+                child {
+                    % left - x^4 - \zeta^34 - 101
+                    node (right101) {$x^{4} - \zeta^{44}$}
+                    edge from parent node[right, xshift=1mm, red] {101}
+                }
+                edge from parent node[left, xshift=-2mm, red] {10}
+            }
+            % right - 11
+            child {
+                % Renamed from (right) to (right11)
+                node (right11) {$x^{8} - \zeta^{56}$}
+                child {
+                    % left - x^4 - \zeta^28 - 110
+                    node {$x^{4} - \zeta^{28}$}
+                    edge from parent node[left, xshift=-1mm, red] {110}
+                }
+                child {
+                    % left - x^4 - \zeta^60 - 111
+                    node (right111) {$x^{4} - \zeta^{60}$}
+                    edge from parent node[right, xshift=1mm, red] {111}
+                }
+                edge from parent node[right, xshift=2mm, red] {11}
+            }
+            edge from parent node[right, xshift=3mm, red] {1}
+        };
+\end{tikzpicture}
+</script>
+</div>
+```
+
 
 ### Level 4
 
@@ -643,6 +1003,7 @@ $$
 ```
 
 
+```{=html}
 <script type="text/tikz">
     \begin{tikzpicture}[
         scale=1.25,
@@ -981,7 +1342,7 @@ $$
         };
     \end{tikzpicture}
 </script>
-
+```
 
 # Tiny DSA and Number Theoretic Transforms
 Tiny DSA uses the following constants, symbols, and mathematical expressions:
@@ -1001,7 +1362,7 @@ R_q & Z_q[X]/(X^{32}+1) &  \text{The ring of single-variable polynomials over} \
     && \text{The coefficients of polynomials in} \ R_q \ \text{belong to the ring} \ \mathbb{Z}_q.\\
     && \text{The highest-degree term is at most} \ x^{31}. \\\\
     & (X^{32}+1) & \text{The} \ reduction \ polynomial. \\\\
- \omega, \ z, \ zeta \ \ & \zeta & \text{The} \ \mathbf{primitive \ 64^{th} \ root} \ \text{of unity in} \ \mathbb{Z}_q. \\
+ \omega, \ z \, & \zeta & \text{The} \ \mathbf{primitive \ 64^{th} \ root} \ \text{of unity in} \ \mathbb{Z}_q. \\
     && \zeta^{64} \equiv 1 \ \text{mod} \ q.\\
     && \zeta^k \not\equiv 1 \ \text{mod} \ q \ for \ all \ k < 64.\\
     && \zeta = 12 \ \text{in Tiny DSA}.\\\\

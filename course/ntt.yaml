@@ -1,0 +1,32 @@
+---
+title: Number Theoretic Transforms in ML DSA
+date: Jan-2026
+lang: "en"
+caption-justification: centering
+papersize: a4
+fontsize: 12pt
+documentclass: extarticle
+geometry: "top=3cm, bottom=3cm, left=2cm"
+
+number-sections: true
+citeproc: true
+link-citations: true
+
+colorlinks: true
+linkcolor: Blue
+urlcolor: Blue
+citecolor: NavyBlue
+
+header-includes:
+  - \usepackage{xcolor}
+  - \usepackage{amsmath,amscd}
+  - \usepackage{hyperref}
+  - \usepackage{tikz}
+  - \usepackage{pdflscape}
+  - \usepackage{afterpage}
+  - \usepackage{caption}
+  - \usepackage[export]{adjustbox}
+  - \hypersetup{ colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+  - \let\includegraphicsbak\includegraphics
+  - \renewcommand*{\includegraphics}[2][]{\includegraphicsbak[frame,#1]{#2}}
+---
