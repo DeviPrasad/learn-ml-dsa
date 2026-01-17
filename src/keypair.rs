@@ -37,6 +37,19 @@ pub(crate) fn key_gen_internal(xi: &[u8; 32]) -> ([u8; LEN_PUBLIC_KEY], [u8; LEN
     let a_hat = expand_a(&rho);
     // Sample short vectors s1 and s2.
     let (s1, s2): ([[i32; N]; L], [[i32; N]; K]) = expand_s(&rho_prime);
+
+    // show that s1 and s2 are small vectors with coefficents bounded by [-ETA, ETA].
+    for k in 0..K {
+        for i in 0..N {
+            assert!(s2[k][i] >= -(ETA as i32) && s2[k][i] <= ETA as i32);
+        }
+    }
+    for l in 0..L {
+        for i in 0..N {
+            assert!(s1[l][i] >= -(ETA as i32) && s1[l][i] <= ETA as i32);
+        }
+    }
+
     let mut s1_hat = [[0i32; N]; L];
     for (i, cv) in s1.iter().enumerate() {
         s1_hat[i] = ntt(&cv);
@@ -237,11 +250,11 @@ fn expand_s(r: &[u8; 64]) -> ([[i32; N]; L], [[i32; N]; K]) {
     rho[65] = 0; // rho[64..65] = IntegerToBytes(r, 2)
     for r in 0..L {
         rho[64] = r as u8;
-        s1[r] = reg_bounded_poly(rho)
+        s1[r].copy_from_slice(&reg_bounded_poly(rho))
     }
     for r in 0..K {
         rho[64] = (r + L) as u8;
-        s2[r] = reg_bounded_poly(rho);
+        s2[r].copy_from_slice(&reg_bounded_poly(rho));
     }
     (s1, s2)
 }
@@ -293,19 +306,22 @@ fn reg_bounded_poly(rho: [u8; 66]) -> [i32; N] {
 
 fn coefficient_from_half_byte(b: u8) -> Result<i8, MlDsaError> {
     #[cfg(any(feature = "ML_DSA_44", feature = "ML_DSA_87"))]
-    const MOD5: [i8; 16] = [0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0];
-    #[cfg(any(feature = "ML_DSA_44", feature = "ML_DSA_87"))]
-    if b < 15 {
-        Ok(2 - MOD5[(b & 0x0F) as usize])
-    } else {
-        Err(MlDsaError::BadBoundedPolySample)
+    {
+        const MOD5: [i8; 16] = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0];
+        if b < 15 {
+            Ok(2 - MOD5[(b & 0x0F) as usize])
+        } else {
+            Err(MlDsaError::BadBoundedPolySample)
+        }
     }
 
     #[cfg(feature = "ML_DSA_65")]
-    if b < 9 {
-        Ok(4 - b as i8)
-    } else {
-        Err(MlDsaError::BadBoundedPolySample)
+    {
+        if b < 9 {
+            Ok(4 - b as i8)
+        } else {
+            Err(MlDsaError::BadBoundedPolySample)
+        }
     }
 }
 

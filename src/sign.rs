@@ -119,6 +119,8 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
         // lines 13 and 14
         // stores high-bits of the polynomial w.
         // coefficients of w1 are in [0, (Q-1)/(2*GAMMA2) - 1]
+        // sw1 is signer's commitment, c is a challenge pseudorandomly derived from w1.
+        // signer computes z, the response component of the protocol.
         let mut w1 = [[0i32; N]; K];
         // section 7.4 specifies that functions are applied coefficientwise
         // to the polynomials in the vector,
@@ -214,8 +216,14 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
                         z[l][j] = mods_q(z[l][j]);
                     }
                 }
+                // show that high_bits of w and (w - c*s2) are same values.
+                // This fact is used in recovering approx_w1 in signature verification function.
+                for k in 0..K {
+                    for i in 0..N {
+                        assert_eq!(high_bits(w[k][i]), high_bits(w[k][i] - cs2[k][i]));
+                    }
+                }
                 response_hint = Some((c_tilda, z, hint));
-                // break;
             }
         }
         // line 31
@@ -240,7 +248,7 @@ fn sig_encode(c_tilda: &[u8; LAMBDA/4], z: &[[i32; N]; L], hint: &[[i32; N]; K])
 }
 
 fn infinity_norm<const D: usize>(vec: &[[i32; N]; D]) -> i32 {
-    const HALF_Q: i32 = (Q)/2;
+    const HALF_Q: i32 = Q/2;
     let mut norm = 0;
     for k in 0..D {
         for &c in vec[k].iter() {

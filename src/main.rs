@@ -25,8 +25,8 @@ mod tests {
     }
 
     #[test]
-    fn dry_512_keygen_test() {
-        for _ in 0..128 {
+    fn test_256_keygen_dry() {
+        for _ in 0..256 {
             let (_, sk) = keypair::key_gen().unwrap();
             let (rho, key, tr, s1, s2, t0) = sign::sk_decode(&sk).unwrap();
             assert_eq!(keypair::sk_encode(&rho, &key, &tr, &s1, &s2, &t0), sk);

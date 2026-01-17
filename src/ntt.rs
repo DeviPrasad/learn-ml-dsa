@@ -127,9 +127,16 @@ pub fn ntt_inverse(wh: &[i32; N]) -> [i32; N] {
                 }
                 start += 2 * len;
             }
+            // NOTE: THIS IS AN INEFFICIENT METHOD, USED ONLY FOR DEMONSTARTING THE PRINCIPLE.
+            // divide by 2 (or equivalently multiply by inverse(2)) in each step.
+            for i in 0..N {
+                w[i] = mod_q(w[i] * 4190209) as i64;
+            }
             len *= 2;
         }
-        w.map(|x| mod_q(mod_q(x) as i64 * 8347681))
+        // This is the stanndard (efficient) method: multiply by the inverse(256) in the end.
+        // w.map(|x| mod_q(mod_q(x) as i64 * 8347681))
+        w.map(|x| x as i32)
     }
     _ntt_inverse_impl_(&mut wh.map(|x| x as i64))
 }
