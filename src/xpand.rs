@@ -1,7 +1,8 @@
 use sha3::digest::{ExtendableOutput, Update};
 use crate::params::{GAMMA1, GAMMA1_COEFFICIENT_POLY_LEN, K, L, N};
+use crate::types::Matrix;
 
-pub fn expand_a(seed: &[u8; 32]) -> [[[i32; N]; L]; K] {
+pub fn expand_a(seed: &[u8; 32]) -> Matrix {
     let mut a_hat: [[[i32; N]; L]; K] = [[[0i32; N]; L]; K];
     let mut rp = [0u8; 34];
     rp[0..32].copy_from_slice(seed);

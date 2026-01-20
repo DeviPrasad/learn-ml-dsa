@@ -3,6 +3,7 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use crate::err::MlDsaError;
 use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ntt_neg_vec, ntt_sub, poly_add, poly_sub};
 use crate::params::{N, D, ETA, K, L, LEN_ETA_PACK_POLY, LEN_PRIVATE_KEY, LEN_T0_PACK_POLY, SIG_LEN, LAMBDA, TAU, Q, GAMMA2, BITLEN_PACK_W1, GAMMA1, BETA, LEN_Z_SCALAR, OMEGA, LEN_HINT_BIT_PACK};
+use crate::types::VecPoly;
 use crate::xpand::{expand_a, expand_mask};
 
 pub fn sign(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8]) -> Result<[u8; SIG_LEN], MlDsaError> {
@@ -539,17 +540,19 @@ pub fn sk_decode(sk: &[u8; LEN_PRIVATE_KEY]) -> Result<([u8; 32], [u8; 32], [u8;
     let z: &[u8; K * LEN_ETA_PACK_POLY] = &sk[128 + L*LEN_ETA_PACK_POLY..128 + L*LEN_ETA_PACK_POLY + K*LEN_ETA_PACK_POLY].try_into()?;
     let w: &[u8; K * LEN_T0_PACK_POLY] = &sk[128 + L*LEN_ETA_PACK_POLY + K*LEN_ETA_PACK_POLY ..].try_into()?;
 
-    let mut s1 = [[0i32; N]; L];
-    for l in 0..L {
-        let t = &y[l * LEN_ETA_PACK_POLY..(l + 1) * LEN_ETA_PACK_POLY].try_into()?;
-        bit_unpack_eta(&t, &mut s1[l])?;
+    fn unpack_eta<const D: usize>(w: &[u8], s: &mut VecPoly<D>) -> Result<(), MlDsaError> {
+        for i in 0..D {
+            let t = &w[i * LEN_ETA_PACK_POLY..(i + 1) * LEN_ETA_PACK_POLY].try_into()?;
+            bit_unpack_eta(&t, &mut s[i])?
+        }
+        Ok(())
     }
 
-    let mut s2: [[i32; N]; K] = [[0; N]; K];
-    for k in 0..K {
-        let t = &z[k * LEN_ETA_PACK_POLY..(k + 1) * LEN_ETA_PACK_POLY].try_into()?;
-        bit_unpack_eta(&t, &mut s2[k])?;
-    }
+    let mut s1: VecPoly<L> = [[0; N]; L];
+    unpack_eta::<L>(y, &mut s1)?;
+
+    let mut s2: VecPoly<K> = [[0; N]; K];
+    unpack_eta::<K>(z, &mut s2)?;
 
     let mut t0: [[i32; N]; K] = [[0; N]; K];
     for k in 0..K {

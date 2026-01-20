@@ -1,4 +1,5 @@
 use crate::params::{N, Q, ZETA};
+use crate::types::{Poly64NTT, PolyNTT, Polynomial, VecPolyNTT};
 
 const ML_DSA_ZETAS: [i32; N] = [
     0, 4808194, 3765607, 3761513, 5178923, 5496691, 5234739, 5178987, 7778734, 3542485, 2682288,
@@ -86,8 +87,8 @@ fn pow_mod_q(n: i32, exp: u8) -> i32 {
     result as i32
 }
 
-pub fn ntt(w: &[i32; N]) -> [i32; N] {
-    fn _ntt_impl_(wh: &mut [i64; N]) -> [i32; N] {
+pub fn ntt(w: &Polynomial) -> PolyNTT {
+    fn _ntt_impl_(wh: &mut Poly64NTT) -> PolyNTT {
         let mut i = 0;
         let mut len = 128_usize;
         while len >= 1 {
@@ -110,8 +111,8 @@ pub fn ntt(w: &[i32; N]) -> [i32; N] {
     _ntt_impl_(&mut w.map(|x| x as i64))
 }
 
-pub fn ntt_inverse(wh: &[i32; N]) -> [i32; N] {
-    fn _ntt_inverse_impl_(w: &mut [i64; N]) -> [i32; N] {
+pub fn ntt_inverse(wh: &PolyNTT) -> Polynomial {
+    fn _ntt_inverse_impl_(w: &mut Poly64NTT) -> Polynomial {
         let mut m = N;
         let mut len = 1_usize;
         while len < N {
@@ -141,15 +142,15 @@ pub fn ntt_inverse(wh: &[i32; N]) -> [i32; N] {
     _ntt_inverse_impl_(&mut wh.map(|x| x as i64))
 }
 
-pub fn ntt_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+pub fn ntt_add(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q((ah[i] + bh[i]) as i64))
 }
 
-pub fn ntt_sub(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+pub fn ntt_sub(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
 }
 
-pub fn ntt_neg_vec<const D: usize>(v: &[[i32; N]; D]) -> [[i32; N]; D] {
+pub fn ntt_neg_vec<const D: usize>(v: &VecPolyNTT<D>) -> [PolyNTT; D] {
     let mut r = [[0i32; N]; D];
     for i in 0..D {
         r[i] = ntt_neg(&v[i]);
@@ -157,21 +158,20 @@ pub fn ntt_neg_vec<const D: usize>(v: &[[i32; N]; D]) -> [[i32; N]; D] {
     r
 }
 
-pub fn ntt_neg(w: &[i32; N]) -> [i32; N] {
-    // td::array::from_fn(|i| mod_q(-w[i] as i64))
+pub fn ntt_neg(w: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q(-w[i] as i64))
 }
 
-pub fn ntt_multiply(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+pub fn ntt_multiply(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q(ah[i] as i64 * bh[i] as i64))
 }
 
-pub fn poly_sub(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+pub fn poly_sub(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     // std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
     std::array::from_fn(|i| ah[i] - bh[i])
 }
 
-pub fn poly_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
+pub fn poly_add(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q((ah[i] + bh[i]) as i64))
 }
 
@@ -179,6 +179,7 @@ pub fn poly_add(ah: &[i32; N], bh: &[i32; N]) -> [i32; N] {
 mod ntt_tests {
     use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ML_DSA_ZETAS};
     use crate::params::{N, Q};
+    use crate::types::Polynomial;
 
     #[test]
     fn test_zetas_less_than_q() {
@@ -189,7 +190,7 @@ mod ntt_tests {
     #[test]
     fn test_ntt_conv_01() {
         // 1 + 200x + 300x^2 + 0^254 + 0^255;
-        let mut w = [0i32; N];
+        let mut w: Polynomial = [0i32; N];
         w[0] = mod_q(Q as i64 - 1);
         w[1] = 200;
         w[2] = 300;
@@ -208,20 +209,19 @@ mod ntt_tests {
 
     #[test]
     fn test_ntt_add_01() {
-        let a: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
-        let b: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
-        let r0 = ntt_inverse(&ntt_add(&ntt(&a), &ntt(&b)));
+        let a: Polynomial = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let b: Polynomial = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let r0: Polynomial = ntt_inverse(&ntt_add(&ntt(&a), &ntt(&b)));
         let r1 = std::array::from_fn(|i| mod_q((a[i] + b[i]) as i64));
         assert_eq!(r0, r1);
-        // println!("{:?}", r0);
     }
 
     #[test]
     fn test_ntt_mult_01() {
-        let a: [i32; N] = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
-        let mut b = [0i32; N];
+        let a: Polynomial = std::array::from_fn(|_| mod_q(getrandom::u32().unwrap() as i64));
+        let mut b: Polynomial = [0i32; N];
         b[0] = 256;
-        let expected: [i32; N] = std::array::from_fn(|i| mod_q((256 * a[i]) as i64));
+        let expected: Polynomial = std::array::from_fn(|i| mod_q((256 * a[i]) as i64));
         for i in 1..N {
             assert!(a[i] >= 0 && a[i] < Q)
         }

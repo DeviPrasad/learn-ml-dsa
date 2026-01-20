@@ -8,6 +8,7 @@ mod keygen_kat;
 mod sign_with_ctx_kat;
 mod sign_test;
 mod sign_hedged_with_ctx;
+mod types;
 
 fn main() {
     let (_, sk) = keypair::key_gen().unwrap();
