@@ -1,10 +1,18 @@
 use std::ops::Rem;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use crate::err::MlDsaError;
-use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ntt_neg_vec, ntt_sub, poly_add, poly_sub};
+use crate::ntt::{mod_q, ntt, ntt_add, ntt_inverse, ntt_multiply, ntt_neg_vec, ntt_sub, poly_add, poly_sub, vec_ntt_multiply};
 use crate::params::{N, D, ETA, K, L, LEN_ETA_PACK_POLY, LEN_PRIVATE_KEY, LEN_T0_PACK_POLY, SIG_LEN, LAMBDA, TAU, Q, GAMMA2, BITLEN_PACK_W1, GAMMA1, BETA, LEN_Z_SCALAR, OMEGA, LEN_HINT_BIT_PACK};
 use crate::types::VecPoly;
 use crate::xpand::{expand_a, expand_mask};
+
+pub fn vecpoly_mods<const D: usize>(z: &mut VecPoly<D>) {
+    for l in 0..L {
+        for j in 0..N {
+            z[l][j] = mods_q(z[l][j]);
+        }
+    }
+}
 
 pub fn sign(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8]) -> Result<[u8; SIG_LEN], MlDsaError> {
     #[cfg(feature="HEDGED")]
@@ -30,6 +38,7 @@ pub fn sign_message_with_ctx(sk: &[u8; LEN_PRIVATE_KEY], rnd: &[u8; 32], m: &[u8
         sign_with_ctx_internal(sk, &m, &rnd, Some(ctx))
     }
 }
+
 fn sign_internal(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32]) -> Result<[u8; SIG_LEN], MlDsaError> {
     let (c_tilda, z, hint) = response_and_hint(sk, m, rnd, None)?;
     Ok(sig_encode(&c_tilda, &z, &hint))
@@ -94,8 +103,8 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
     // line 10
     while response_hint.is_none() {
         // let mut c_tilda = [0u8; LAMBDA/4];
-        let mut z = [[0i32; N]; L];
-        let mut hint = [[2i32; N]; K];
+        let mut z: VecPoly<L> = [[0; _]; _];
+        let mut hint: VecPoly<K> = [[0; _]; _];
 
         if counter/4 > 814 { // it's not worth waiting :-)
             return Err(MlDsaError::SignatureAborted);
@@ -108,7 +117,7 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
             y_hat[l].copy_from_slice(&ntt(&y[l]));
         }
 
-        let mut w = [[0i32; N]; K];
+        let mut w: VecPoly<K> = [[0; _]; _];
         for k in 0..K {
             let mut t = [0i32; N];
             for l in 0..L {
@@ -122,7 +131,7 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
         // coefficients of w1 are in [0, (Q-1)/(2*GAMMA2) - 1]
         // sw1 is signer's commitment, c is a challenge pseudorandomly derived from w1.
         // signer computes z, the response component of the protocol.
-        let mut w1 = [[0i32; N]; K];
+        let mut w1: VecPoly<K> = [[0; _]; _];
         // section 7.4 specifies that functions are applied coefficientwise
         // to the polynomials in the vector,
         for k in 0..K {
@@ -146,20 +155,20 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
         let c_hat = ntt(&c);
 
         // line 18: cs1 = ntt_inverse(c_hat * s1_hat)
-        let mut cs1 = [[0i32; N]; L];
+        let mut cs1: VecPoly<L> = [[0; _]; _];
         for l in 0..L {
-            cs1[l] = ntt_inverse(&ntt_multiply(&c_hat, &s1_hat[l]));
+            cs1[l].copy_from_slice(&ntt_inverse(&ntt_multiply(&c_hat, &s1_hat[l])));
         }
 
         // line 19: cs2 = ntt_inverse(c_hat * s2_hat)
-        let mut cs2 = [[0i32; N]; K];
+        let mut cs2: VecPoly<K> = [[0; _]; _];
         for k in 0..K {
             cs2[k].copy_from_slice(&ntt_inverse(&ntt_multiply(&c_hat, &s2_hat[k])));
         }
         // line 20: z = y + cs1
         // let mut z = [[0i32; N]; L];
         for l in 0..L {
-            z[l] = poly_add(&y[l], &cs1[l]);
+            z[l].copy_from_slice(&poly_add(&y[l], &cs1[l]));
         }
         // lines 21 and 22.
         let mut r0 = [[0i32; N]; K];
@@ -196,12 +205,9 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
             response_hint = None;
         } else { // lines 24 to 30
             // line 25.
-            let mut c_t0 =[[0i32; N]; K];
-            for k in 0..K {
-                c_t0[k].copy_from_slice(&ntt_inverse(&ntt_multiply(&c_hat, &t0_hat[k])));
-            }
+            let mut c_t0: VecPoly<K> = [[0; _]; _];
+            vec_ntt_multiply(&c_hat, &t0_hat, &mut c_t0);
             // lines 26 and 27.
-            // make_hint(&ntt_neg_vec(&c_t0), &vec_add(&vec_sub(&w, &cs2), &c_t0), &mut hint);
             make_hint(&ntt_neg_vec(&c_t0), &vec_add(&vec_sub(&w, &cs2), &c_t0), &mut hint);
             let infinity_norm_ct0 = infinity_norm(&c_t0);
             // lines 28-30
@@ -212,11 +218,7 @@ pub fn response_and_hint(sk: &[u8; LEN_PRIVATE_KEY], m: &[u8], rnd: &[u8; 32], c
                 println!("MLDSA signature restart case 2.");
                 response_hint = None;
             } else {
-                for l in 0..L {
-                    for j in 0..N {
-                        z[l][j] = mods_q(z[l][j]);
-                    }
-                }
+                vecpoly_mods::<L>(&mut z);
                 // show that high_bits of w and (w - c*s2) are same values.
                 // This fact is used in recovering approx_w1 in signature verification function.
                 for k in 0..K {
@@ -499,18 +501,18 @@ fn _ref_decompose_(rx: i32) -> (i32, i32) {
 }
 
 
-// samples the challenge polynomial with TAU nonzero coefficients in {-1,1}.
+// samples the challenge polynomial with TAU nonzero coefficients in [-1,1].
 // returns a polynomial c: R with coefficients in {-1, 0, 1} and Hamming weight t <= 64.
 // That is, the number of non-zero coefficients in c are less than 64.
 // More precisely, it will be one of 39, 49, and 60 for category 2, 3, and 5, respectively.
 #[inline]
 pub fn sample_in_ball(rho: &[u8; LAMBDA/4]) -> [i32; N] {
-    let mut h = sha3::Shake256::default();
-    h.update(rho);
-    let mut xof = h.finalize_xof();
+    let mut xof = sha3::Shake256::default();
+    xof.update(rho);
+    let mut xof = xof.finalize_xof();
     let mut s = [0u8; 8];
     xof.read(&mut s);
-    let mut h: u64 = u64::from_le_bytes(s); // note: h has N bits.
+    let mut h: i64 = i64::from_le_bytes(s); // note: h has N bits.
     let mut c = [0i32; N];
     for i in (N-TAU)..256usize { // iterate TAU times
         assert!(i > 195); // or N-i < 61
@@ -525,7 +527,7 @@ pub fn sample_in_ball(rho: &[u8; LAMBDA/4]) -> [i32; N] {
         c[i] = c[j]; // init c[i] with {-1, 0, 1}, from a random location; most likely contains 0.
         // h[i + TAU - N] actually evaluates to h[0], [1], h[2], ..., h[255]
         // (N-TAU) + TAU - N, (N-TAU + 1) + TAU - N, (N-TAU + 2) + TAU - N,..., (N-TAU + 255) + TAU - N,
-        c[j] = 1 - 2 * (h & 1) as i32; // c_j is -1 if (h&1) is 1, and 1 otherwise.
+        c[j] = mod_q(1 - 2 * (h & 1)); // c_j is -1 if (h&1) is 1, and 1 otherwise.
         h >>= 1
     }
     c
@@ -548,13 +550,13 @@ pub fn sk_decode(sk: &[u8; LEN_PRIVATE_KEY]) -> Result<([u8; 32], [u8; 32], [u8;
         Ok(())
     }
 
-    let mut s1: VecPoly<L> = [[0; N]; L];
+    let mut s1: VecPoly<L> = [[0; _]; _];
     unpack_eta::<L>(y, &mut s1)?;
 
-    let mut s2: VecPoly<K> = [[0; N]; K];
+    let mut s2: VecPoly<K> = [[0; _]; _];
     unpack_eta::<K>(z, &mut s2)?;
 
-    let mut t0: [[i32; N]; K] = [[0; N]; K];
+    let mut t0: [[i32; N]; K] = [[0; _]; _];
     for k in 0..K {
         let t = &w[k * LEN_T0_PACK_POLY..(k + 1) * LEN_T0_PACK_POLY].try_into()?;
         bit_unpack_t0(&t, &mut t0[k])?;
@@ -569,7 +571,6 @@ fn inclusive(l: i32, h: i32, v: i32) -> bool {
 // w is bit-packed polynomial
 fn bit_unpack_eta(w: &[u8; LEN_ETA_PACK_POLY], s: &mut[i32; N]) -> Result<(), MlDsaError> {
     const _ETA_: i32 = ETA as i32;
-    let mut ok = true;
 
     #[cfg(any(feature="ML_DSA_44", feature="ML_DSA_87"))]
     for i in 0..N/8 {
@@ -590,10 +591,6 @@ fn bit_unpack_eta(w: &[u8; LEN_ETA_PACK_POLY], s: &mut[i32; N]) -> Result<(), Ml
         s[8*i+5] = _ETA_ - s[8*i+5];
         s[8*i+6] = _ETA_ - s[8*i+6];
         s[8*i+7] = _ETA_ - s[8*i+7];
-        ok &= inclusive(-_ETA_, _ETA_, s[2*i+1]) & inclusive(-_ETA_, _ETA_, s[2*i+1]) &
-            inclusive(-_ETA_, _ETA_, s[2*i+2]) & inclusive(-_ETA_, _ETA_, s[2*i+1]) &
-            inclusive(-_ETA_, _ETA_, s[2*i+5]) & inclusive(-_ETA_, _ETA_, s[2*i+1]) &
-            inclusive(-_ETA_, _ETA_, s[2*i+7]) & inclusive(-_ETA_, _ETA_, s[2*i+1]);
     }
 
     #[cfg(feature="ML_DSA_65")]
@@ -602,18 +599,19 @@ fn bit_unpack_eta(w: &[u8; LEN_ETA_PACK_POLY], s: &mut[i32; N]) -> Result<(), Ml
         s[2*i+1] = (w[i] >> 4) as i32;
         s[2*i+0] = _ETA_ - s[2 * i + 0];
         s[2*i+1] = _ETA_ - s[2 * i + 1];
-        ok &= inclusive(-_ETA_, _ETA_, s[2 * i + 0]) & inclusive(-_ETA_, _ETA_, s[2 * i + 1]);
     }
 
-    if ok {
-        Ok(())
-    } else {
-        Err(MlDsaError::MalformedShortVector)
+    for &v in s.as_ref() {
+        debug_assert!(v <= (ETA as i32) || v >= -(ETA as i32));
+        if v > (ETA as i32) || v < -(ETA as i32) {
+            return Err(MlDsaError::MalformedShortVector)
+        }
     }
+    Ok(())
 }
 
 /**
-One iteration handles bits in this fashion - w0 is the first byte to consider in the loop.
+One iteration handles bits in this fashion: w0 is the first byte to consider in the loop.
 
 |         w3         |              w2             |          w1         |        w0           |
 |------+------+------|+------+------+------+-------|+------+------+------|+------+------+------|
@@ -621,7 +619,7 @@ One iteration handles bits in this fashion - w0 is the first byte to consider in
 |------+------+------|+------+------+------+-------|+------+------+------|+------+------+------|
 |                    |                             |                     |                     |
  **/
-// Unpack polynomial t0 with coefficients in ]-2^{D-1}, 2^{D-1}]
+// Unpack polynomial t0 with coefficients in [-2^{D-1}, 2^{D-1}]
 fn bit_unpack_t0(w: &[u8; LEN_T0_PACK_POLY], t: &mut [i32; N]) -> Result<(), MlDsaError> {
     const _2_POW_D_MINUS_1_: i32 = 1 << (D-1);
     let mut ok = true;
@@ -699,6 +697,9 @@ fn bit_unpack_t0(w: &[u8; LEN_T0_PACK_POLY], t: &mut [i32; N]) -> Result<(), MlD
         t[8*i+6] = _2_POW_D_MINUS_1_ - t[8*i+6];
         t[8*i+7] = _2_POW_D_MINUS_1_ - t[8*i+7];
     }
+    // This is a tight test. Our tests fail even if we move the boundaries by +1 or -1.
+    // ok &= inclusive(-_2_POW_D_MINUS_1_+2, _2_POW_D_MINUS_1_, t[i]);
+    // ok &= inclusive(-_2_POW_D_MINUS_1_+1, _2_POW_D_MINUS_1_ - 1, t[i]);
     for i in 0..N {
         ok &= inclusive(-_2_POW_D_MINUS_1_+1, _2_POW_D_MINUS_1_, t[i]);
     }

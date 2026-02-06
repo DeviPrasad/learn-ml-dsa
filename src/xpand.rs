@@ -1,6 +1,6 @@
 use sha3::digest::{ExtendableOutput, Update};
 use crate::params::{GAMMA1, GAMMA1_COEFFICIENT_POLY_LEN, K, L, N};
-use crate::types::Matrix;
+use crate::types::{Matrix, VecPoly};
 
 pub fn expand_a(seed: &[u8; 32]) -> Matrix {
     let mut a_hat: [[[i32; N]; L]; K] = [[[0i32; N]; L]; K];
@@ -24,7 +24,7 @@ pub fn expand_a(seed: &[u8; 32]) -> Matrix {
 // mu is a 16-bit counter incremented by l in each iteration in algorithm 7, sign_internal.
 // output: vector y \in R^l
 pub fn expand_mask(rho: &[u8; 64], counter: u16) -> [[i32; N]; L] {
-    let mut y = [[0i32; N]; L];
+    let mut y: VecPoly<L> = [[0; _]; _];
     const C: usize = GAMMA1_COEFFICIENT_POLY_LEN;
     for l in 0..L {
         let mut val = [0u8; 32*C];

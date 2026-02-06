@@ -70,12 +70,6 @@ pub(crate) fn key_gen_internal(xi: &[u8; 32]) -> ([u8; LEN_PUBLIC_KEY], [u8; LEN
         for j in 0..N {
             (t1[i][j], t0[i][j]) = power2round(t_vec[j])
         }
-        for j in 0..N {
-            assert!(t1[i][j] < 1024_i32);
-        }
-        for j in 0..N {
-            assert!(t0[i][j] <= (1 << (D-1)));
-        }
     }
 
     let pk = pk_encode(&rho, &t1);
@@ -339,7 +333,8 @@ fn coefficient_from_three_bytes(b0: u8, b1: u8, b2: u8) -> Result<i32, MlDsaErro
 fn power2round(r:i32) -> (i32, i32) {
     assert!(r < Q);
     let r1 = (r + (1 << (D-1)) - 1) >> D;
+    assert!(r1 >= 0 && r1 < 1024);
     let r0 = r - (r1 << D);
-    assert!(r1 < 1024);
+    assert!(r0 >= -4095 && r0 <= 4096);
     (r1, r0)
 }

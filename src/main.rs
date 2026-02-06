@@ -20,7 +20,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use crate::{keypair, sign};
-    use crate::params::{LAMBDA, N, TAU};
+    use crate::params::{LAMBDA, N, Q, TAU};
     fn get_random(rnd: &mut [u8]) {
         let _ = getrandom::fill(rnd).expect("Failed to generate randomness");
     }
@@ -42,8 +42,8 @@ mod tests {
         {
             let mut tau = 0;
             for i in 0..N {
-                assert!([-1, 0, 1].contains(&c[i]));
-                if c[i] == -1 || c[i] == 1 {
+                assert!([Q-1, 0, 1].contains(&c[i]));
+                if c[i] == Q-1 || c[i] == 1 {
                     tau += 1;
                 }
             }

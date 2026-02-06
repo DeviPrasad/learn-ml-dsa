@@ -1,0 +1,35 @@
+---
+title: Annotated ML DSA Signature Algorithm
+date: Jan-2026
+lang: "en"
+documentclass: article
+papersize: a4
+fontsize: 12pt
+geometry: "top=2.5cm, bottom=2.5cm, left=1.9cm, right=1.9cm"
+caption-justification: centering
+
+number-sections: true
+citeproc: true
+link-citations: true
+
+colorlinks: true
+linkcolor: Blue
+urlcolor: Blue
+citecolor: NavyBlue
+
+mainfont: TeX Gyre Pagella
+mathfont: Asana Math
+
+header-includes:
+  - \usepackage{xcolor}
+  - \usepackage{amsmath,amscd}
+  - \usepackage{caption}
+  - \usepackage{hyperref}
+  - \usepackage{graphicx}
+  - \usepackage{algorithm}
+  - \usepackage{algpseudocode}
+  - \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+  # comment fontspec and unicode-math for pdflatex compatibility
+  - \usepackage{fontspec}
+  - \usepackage{unicode-math}
+---

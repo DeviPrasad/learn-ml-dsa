@@ -1,5 +1,5 @@
 use crate::params::{N, Q, ZETA};
-use crate::types::{Poly64NTT, PolyNTT, Polynomial, VecPolyNTT};
+use crate::types::{Poly64NTT, PolyNTT, Polynomial, VecPoly, VecPolyNTT};
 
 const ML_DSA_ZETAS: [i32; N] = [
     0, 4808194, 3765607, 3761513, 5178923, 5496691, 5234739, 5178987, 7778734, 3542485, 2682288,
@@ -151,9 +151,9 @@ pub fn ntt_sub(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
 }
 
 pub fn ntt_neg_vec<const D: usize>(v: &VecPolyNTT<D>) -> [PolyNTT; D] {
-    let mut r = [[0i32; N]; D];
+    let mut r: VecPolyNTT<D> = [[0i32; _]; _];
     for i in 0..D {
-        r[i] = ntt_neg(&v[i]);
+        r[i].copy_from_slice(&ntt_neg(&v[i]));
     }
     r
 }
@@ -166,9 +166,14 @@ pub fn ntt_multiply(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
     std::array::from_fn(|i| mod_q(ah[i] as i64 * bh[i] as i64))
 }
 
+pub fn vec_ntt_multiply<const D: usize>(ph: &PolyNTT, vh: &VecPolyNTT<D>, rh: &mut VecPoly<D>) {
+    for k in 0..D {
+        rh[k].copy_from_slice(&ntt_inverse(&ntt_multiply(&ph, &vh[k])));
+    }
+}
+
 pub fn poly_sub(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
-    // std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
-    std::array::from_fn(|i| ah[i] - bh[i])
+    std::array::from_fn(|i| mod_q((ah[i] - bh[i]) as i64))
 }
 
 pub fn poly_add(ah: &PolyNTT, bh: &PolyNTT) -> PolyNTT {
