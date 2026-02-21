@@ -1,0 +1,113 @@
+\newcommand{\TComment}[1]{\qquad #1}
+\newcommand{\LComment}[1]{$\triangleright$ {#1}}
+
+\newcommand{\is}{\leftarrow}
+\newcommand{\Param}[1]{\ensuremath{\mathit{#1}}}
+\newcommand{\Mod}[1]{\ensuremath{\ \mathrm{mod} \ {#1}}}
+\newcommand{\ModPlusMinus}[1]{\ensuremath{\ \mathrm{mod}^{\pm} \ {#1}}}
+\newcommand{\BitsToBytes}{\Name{BitsToBytes}}
+\newcommand{\BytesToBits}{\Name{BytesToBits}}
+
+\newcommand{\RingZq}{\mathbb{Z}_{q}^{256}}
+\newcommand{\RingZm}{\mathbb{Z}_{m}^{256}}
+\newcommand{\RingTq}{\mathbb{T}_{q}^{256}}
+
+\newcommand{\RingTqKxL}{\mathbb{T}_{q}^{k \times \ell}}
+
+\newcommand{\RingRmL}{\mathbin{R_{m}^{\ell}}}
+\newcommand{\RingRmK}{\mathbin{R_{m}^{k}}}
+\newcommand{\RingRqL}{\mathbin{R_{q}^{\ell}}}
+\newcommand{\RingRqK}{\mathbin{R_{q}^{k}}}
+\newcommand{\RingRqZeroK}{\mathbin{R_{q_0}^{k}}}
+\newcommand{\RingRqOneK}{\mathbin{R_{q_1}^{k}}}
+
+\newcommand{\Rq}{R_q}
+\newcommand{\RqK}{R_q^k}
+\newcommand{\TqK}{\mathbb{T}_q^k}
+\newcommand{\TqL}{\mathbb{T}_q^{\ell}}
+\newcommand{\RmL}{R_m^{\ell}}
+\newcommand{\RmK}{R_m^k}
+\newcommand{\RtK}{R_t^k}
+
+\newcommand{\RingZqK}{(\mathbb{Z}_{q}^{256})^{k}}
+\newcommand{\RingZqL}{(\mathbb{Z}_{q}^{256})^{\ell}}
+\newcommand{\RingZqKxL}{(\mathbb{Z}_{q}^{256})^{k \times \ell}}
+\newcommand{\RingTqK}{\mathbb{T}_{q}^{k}}
+
+\newcommand{\Name}[1]{\operatorname{ #1 }}
+\newcommand{\NameBold}[1]{\ensuremath{\operatorname{\mathbf{ #1 }}}}
+\newcommand{\Bold}[1]{\ensuremath{\operatorname{\mathbf{ #1 }}}}
+\newcommand{\HatName}[1]{\ensuremath{\widehat{\operatorname{ #1 }}}}
+\newcommand{\HatNameBold}[1]{\ensuremath{\widehat{\operatorname{\mathbf{ #1 }}}}}
+\newcommand{\HatBold}[1]{\ensuremath{\widehat{\operatorname{\mathbf{ #1 }}}}}
+
+\newcommand{\HatA}{\widehat{\operatorname{\mathbf{A}}}}
+\newcommand{\HA}{\widehat{\operatorname{a}}}
+
+\newcommand{\NTT}[1]{\ensuremath{\operatorname{NTT}}({#1})}
+\newcommand{\NTTInv}[1]{\ensuremath{\operatorname{NTT}^{-1}}({#1})}
+
+\newcommand{\IntegerToBytes}{\operatorname{Integer2Bytes}}
+
+\newcommand{\ExpandA}{\ensuremath{\operatorname{ExpandA}}}
+\newcommand{\ExpandS}{\ensuremath{\operatorname{ExpandS}}}
+\newcommand{\PowerTwoRound}{\operatorname{Power2Round}}
+\newcommand{\pkEncode}{\operatorname{pkEncode}}
+\newcommand{\pkDecode}{\operatorname{pkDecode}}
+\newcommand{\skEncode}{\operatorname{skEncode}}
+\newcommand{\skDecode}{\operatorname{skDecode}}
+\newcommand{\NH}{\Name{H}}
+\newcommand{\RhoDash}{{\rho'}}
+
+\newcommand{\SOne}{\Bold{s}_1}
+\newcommand{\STwo}{\Bold{s}_2}
+\newcommand{\TOne}{\Bold{t}_1}
+\newcommand{\TZero}{\Bold{t}_0}
+\newcommand{\z}{\Bold{z}}
+\newcommand{\h}{\Bold{h}}
+\newcommand{\bZero}{b_0}
+\newcommand{\bOne}{b_1}
+\newcommand{\bTwo}{b_2}
+\newcommand{\bOneDash}{b'_1}
+\newcommand{\bTwoDash}{b'_2}
+\newcommand{\zZero}{z_0}
+\newcommand{\zOne}{z_1}
+
+\newcommand{\HatSOne}{\widehat{\;\!\Bold{s}\;\!}_1}
+\newcommand{\HatSTwo}{\widehat{\;\!\Bold{s}\;\!}_2}
+\newcommand{\HatTOne}{\widehat{\;\!\Bold{t}\;\!}_1}
+\newcommand{\HatTZero}{\widehat{\;\!\Bold{t}\;\!}_0}
+\newcommand{\HatC}{\widehat{\;\!\Name{c}\;\!}}
+
+\newcommand{\BytesSixtyFour}{\mathbb{B}^{64}}
+\newcommand{\BytesThirtyTwo}{\mathbb{B}^{32}}
+\newcommand{\OneByte}{\mathbb{B}^1}
+\newcommand{\BytesEight}{\mathbb{B}^8}
+\newcommand{\ThreeBytes}{\mathbb{B}^3}
+\newcommand{\SixtySixBytes}{\mathbb{B}^{66}}
+
+\newcommand{\y}{\NameBold{y}}
+\newcommand{\w}{\NameBold{w}}
+\newcommand{\wOneEncode}{\Name{w1Encode}}
+\newcommand{\wOne}{\NameBold{w}_1}
+\newcommand{\rZero}{\NameBold{r}_0}
+\newcommand{\nc}{\Name{c}}
+\newcommand{\CSOne}{\langle\!\langle c \mathbf{s}_1 \rangle\!\rangle }
+\newcommand{\CSTwo}{\langle\!\langle c \mathbf{s}_2 \rangle\!\rangle}
+\newcommand{\CTZero}{\langle\!\langle c\mathbf{t}_0 \rangle\!\rangle}
+\newcommand{\InfNormOfZ}{ \Vert \textbf{z} \Vert_\infty }
+\newcommand{\InfNormOfRZero}{ \Vert \textbf{r}_0 \Vert_\infty }
+\newcommand{\InfNormOfCTZero}{ \Vert \langle\!\langle c\textbf{t}_0\rangle\!\rangle \Vert_\infty }
+
+\newcommand{\Diff}[2]{{#1} - {#2}}
+
+\newcommand{\tildeC}{\tilde{c}}
+\newcommand{\ExpandMask}{\Name{ExpandMask}}
+\newcommand{\HighBits}{\Name{HighBits}}
+\newcommand{\LowBits}{\Name{LowBits}}
+\newcommand{\SampleInBall}{\Name{SampleInBall}}
+\newcommand{\MakeHint}{\Name{MakeHint}}
+\newcommand{\sigEncode}{\Name{sigEncode}}
+\newcommand{\CoeffFromThreeBytes}{\Name{CoeffFromThreeBytes}}
+\newcommand{\CoeffFromHalfByte}{\Name{CoeffFromHalfByte}}
+\newcommand{\RejBoundedPoly}{\Name{RejBoundedPoly}}

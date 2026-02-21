@@ -1,6 +1,6 @@
 ---
 title: Annotated ML DSA Signature Algorithm
-date: Jan-2026
+date: March-2026
 lang: "en"
 documentclass: article
 papersize: a4
@@ -32,4 +32,5 @@ header-includes:
   # comment fontspec and unicode-math for pdflatex compatibility
   - \usepackage{fontspec}
   - \usepackage{unicode-math}
+  - \input{macros.tex}
 ---
